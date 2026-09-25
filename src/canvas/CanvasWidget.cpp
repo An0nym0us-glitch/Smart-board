@@ -451,10 +451,14 @@ void CanvasWidget::pointerEvent(PointerEvent& e)
     switch (e.phase) {
     case PointerPhase::Down: {
         if (!m_instruments->isEmpty()) {
+            // Instrument buttons always win; the body yields to ink started along an edge.
+            const qreal tol = viewToPageLength(m_ui.theme.dp(6));
+            const int handle = m_instruments->handleAt(e.pagePos, tol);
             const bool inking = m_tools->activeToolId() == ToolId::Pen && e.device != PointerDevice::StylusEraser;
             const bool nearEdge = inking
                 && m_instruments->edgeConstraint(e.pagePos, viewToPageLength(m_ui.theme.dp(26)), nullptr);
-            if (!nearEdge && m_instruments->pointerDown(e.pointerId, e.pagePos, viewToPageLength(m_ui.theme.dp(6)))) {
+            const bool grab = handle > Instrument::kBodyHandle || (handle == Instrument::kBodyHandle && !nearEdge);
+            if (grab && m_instruments->pointerDown(e.pointerId, e.pagePos, tol)) {
                 m_instrumentPointers.insert(e.pointerId);
                 update();
                 return;

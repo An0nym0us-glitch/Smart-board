@@ -33,6 +33,9 @@ public:
 
     void setUnits(qreal pxPerUnit, const QString& label);
 
+    /// Handle of the topmost instrument under pagePos (Instrument::kNoHandle if none).
+    int handleAt(const QPointF& pagePos, qreal tol) const;
+
     /// Returns true if pagePos hits an instrument or one of its handles.
     bool hitTest(const QPointF& pagePos, qreal tol) const;
 

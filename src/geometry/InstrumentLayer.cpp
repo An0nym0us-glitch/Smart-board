@@ -87,6 +87,16 @@ Instrument* InstrumentLayer::instrumentAt(const QPointF& pagePos, qreal tol) con
     return nullptr;
 }
 
+int InstrumentLayer::handleAt(const QPointF& pagePos, qreal tol) const
+{
+    for (auto it = m_instruments.rbegin(); it != m_instruments.rend(); ++it) {
+        const int handle = (*it)->handleAt((*it)->toLocal(pagePos), tol);
+        if (handle != Instrument::kNoHandle)
+            return handle;
+    }
+    return Instrument::kNoHandle;
+}
+
 bool InstrumentLayer::hitTest(const QPointF& pagePos, qreal tol) const
 {
     return instrumentAt(pagePos, tol) != nullptr;
