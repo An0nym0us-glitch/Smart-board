@@ -56,6 +56,8 @@ public:
     const ShapeStyle& style() const { return m_style; }
     void setStyle(const ShapeStyle& style) { m_style = style; }
     int sides() const { return m_sides; }
+    /// Size of a box shape in local units (unrotated).
+    QSizeF boxSize() const { return m_size; }
 
     QRectF localBounds() const override;
     qreal outlineMargin() const override;
@@ -64,6 +66,7 @@ public:
     bool canRotate() const override { return !isLineShape(m_kind); }
     bool keepAspectRatio() const override { return m_kind == ShapeKind::Circle; }
     QVector<QPointF> controlPoints() const override;
+    bool enclosesPoint(const QPointF& pagePos) const override;
     bool setColor(const QColor& color) override;
     QColor color() const override { return m_style.stroke; }
     std::unique_ptr<DocumentObject> clone() const override;

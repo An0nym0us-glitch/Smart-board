@@ -111,7 +111,7 @@ private slots:
         auto s = MeasurementObject::create(MeasureKind::Slope, {QPointF(0, 0), QPointF(40, -80)}, Qt::yellow);
         QCOMPARE(s->valueText(cs), QStringLiteral("m = 2"));
         auto area = MeasurementObject::create(MeasureKind::Area, {QPointF(0, 0), QPointF(80, 0), QPointF(80, 40), QPointF(0, 40)}, Qt::yellow);
-        QCOMPARE(area->valueText(cs), QStringLiteral("A = 2 cm²"));
+        QCOMPARE(area->valueText(cs), QStringLiteral("A = 2 cm²  ·  P = 6 cm"));
         // Editing a point updates the live value.
         d->moveControlPointTo(1, QPointF(0, 40));
         QCOMPARE(d->valueText(cs), QStringLiteral("1 cm"));

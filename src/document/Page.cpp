@@ -38,6 +38,14 @@ DocumentObject* Page::topmostAt(const QPointF& pagePos, qreal tolerance) const
     return nullptr;
 }
 
+DocumentObject* Page::topmostEnclosing(const QPointF& pagePos) const
+{
+    for (auto it = m_objects.rbegin(); it != m_objects.rend(); ++it)
+        if ((*it)->enclosesPoint(pagePos))
+            return it->get();
+    return nullptr;
+}
+
 std::vector<DocumentObject*> Page::objectsIntersecting(const QRectF& rect) const
 {
     std::vector<DocumentObject*> out;

@@ -1,5 +1,6 @@
 # Core library: everything except main(), shared by the application and the tests.
 add_library(classboard_lib STATIC
+    ai/MathInkRecognizer.cpp
     ai/Recognition.cpp
     ai/ShapeRecognizer.cpp
     app/AppSettings.cpp
@@ -22,6 +23,8 @@ add_library(classboard_lib STATIC
     document/ImageStore.cpp
     document/ObjectFactory.cpp
     document/Page.cpp
+    document/PageOperations.cpp
+    document/PageSize.cpp
     document/PageTemplate.cpp
     document/ShapeObject.cpp
     document/StrokeObject.cpp
@@ -35,21 +38,25 @@ add_library(classboard_lib STATIC
     geometry/Instruments.cpp
     geometry/Label.cpp
     geometry/MeasurementObject.cpp
+    geometry/Precision.cpp
     graph/GraphObject.cpp
     graph/TableObject.cpp
     input/InputManager.cpp
     math/CoordinateSystem.cpp
+    math/MeasureScale.cpp
     math/Expression.cpp
     math/equation/EquationObject.cpp
     math/equation/MathLayout.cpp
     storage/AutosaveManager.cpp
     storage/Container.cpp
     storage/PdfImporter.cpp
+    storage/PageImport.cpp
     storage/ProjectSerializer.cpp
     tools/ConstructTool.cpp
     tools/EditOperations.cpp
     tools/EraserTool.cpp
     tools/GraphTool.cpp
+    tools/MagicEquation.cpp
     tools/MeasureTool.cpp
     tools/PenTool.cpp
     tools/SelectTool.cpp
@@ -66,11 +73,15 @@ add_library(classboard_lib STATIC
     ui/TableCellEditor.cpp
     ui/Theme.cpp
     ui/Toast.cpp
+    ui/popovers/BoardPanels.cpp
     ui/popovers/DrawingPanels.cpp
     ui/popovers/LessonPanels.cpp
+    ui/popovers/MagicEquationPanel.cpp
     ui/popovers/MathPanels.cpp
     ui/popovers/PageNavigatorPanel.cpp
     ui/popovers/PanelUtil.cpp
+    ui/popovers/PropertiesPanel.cpp
+    ui/widgets/NumberField.cpp
     ui/widgets/SegmentedControl.cpp
     ui/widgets/SwatchGrid.cpp
     ui/widgets/ToggleRow.cpp

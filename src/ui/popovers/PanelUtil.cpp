@@ -72,6 +72,33 @@ TouchButton* pill(const UiContext& ui, const QString& icon, const QString& text,
     return b;
 }
 
+QWidget* choices(const UiContext& ui, const QStringList& labels, int current, QWidget* parent,
+                 std::function<void(int)> onPick, int columns, QVector<TouchButton*>* buttons)
+{
+    auto* w = new QWidget(parent);
+    auto* grid = new QGridLayout(w);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setSpacing(ui.theme.dpi(6));
+    auto* list = new QVector<TouchButton*>();
+    QObject::connect(w, &QObject::destroyed, [list]() { delete list; });
+    for (int i = 0; i < labels.size(); ++i) {
+        auto* b = new TouchButton(ui, QString(), labels[i], TouchButton::Style::Pill, w);
+        b->setCheckable(true);
+        b->setChecked(i == current);
+        list->push_back(b);
+        QObject::connect(b, &QAbstractButton::clicked, w, [list, i, onPick]() {
+            for (int j = 0; j < list->size(); ++j)
+                (*list)[j]->setChecked(j == i);
+            if (onPick)
+                onPick(i);
+        });
+        grid->addWidget(b, i / columns, i % columns);
+        if (buttons)
+            buttons->push_back(b);
+    }
+    return w;
+}
+
 QWidget* row(const UiContext& ui, const QVector<QWidget*>& widgets, QWidget* parent, bool stretchEnd)
 {
     auto* w = new QWidget(parent);

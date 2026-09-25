@@ -39,6 +39,12 @@ public:
     QColor color() const override { return m_color; }
     std::unique_ptr<DocumentObject> clone() const override;
 
+    /// Interior angle at pts[1] in degrees (0..180), -1 if undefined.
+    static double angleDegrees(const QVector<QPointF>& pagePts, const CoordinateSystem& cs);
+    /// Perimeter of a closed polygon in math units.
+    static double perimeter(const QVector<QPointF>& pagePts, const CoordinateSystem& cs);
+    static QString format(MeasureKind kind, const QVector<QPointF>& pagePts, const CoordinateSystem& cs);
+
     /// Renders a measurement preview from page points (used by the measure tool).
     static void paintPreview(QPainter& painter, MeasureKind kind, const QVector<QPointF>& pagePoints,
                              const QColor& color, const CoordinateSystem& cs, qreal zoom);
@@ -55,7 +61,6 @@ private:
     MeasurementObject(const MeasurementObject&) = default;
     static void paintShape(QPainter& p, MeasureKind kind, const QVector<QPointF>& pts, const QColor& color,
                            const QString& label, qreal rotation, qreal zoom);
-    static QString format(MeasureKind kind, const QVector<QPointF>& pagePts, const CoordinateSystem& cs);
 
     MeasureKind m_kind = MeasureKind::Distance;
     QVector<QPointF> m_points; // local

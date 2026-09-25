@@ -1,6 +1,7 @@
 #include "export/Exporters.h"
 
 #include "canvas/PageRenderer.h"
+#include "document/PageSize.h"
 #include "export/ZipWriter.h"
 
 #include <QBuffer>
@@ -16,11 +17,17 @@ namespace cb {
 namespace {
 QString tr(const char* s) { return QCoreApplication::translate("Export", s); }
 
-// 16:9 slide size shared by PDF and PPTX (13.333 x 7.5 inch).
-constexpr qreal kPageWidthMm = 338.6667;
-constexpr qreal kPageHeightMm = 190.5;
-constexpr int kSlideCx = 12192000; // EMU
-constexpr int kSlideCy = 6858000;
+// Default 16:9 slide width (13.333 inch). Slide heights follow the page aspect ratio.
+constexpr qint64 kSlideCx = 12192000; // EMU
+constexpr qint64 kEmuPerMm = 36000;
+
+/// Physical size of an exported page: document units are 40 per cm, so an A4 page becomes an A4
+/// PDF page and a 16:9 board page a 48 × 27 cm page.
+QPageSize pageSizeFor(const QRectF& area)
+{
+    const QSizeF mm(area.width() / pagesize::kUnitsPerCm * 10.0, area.height() / pagesize::kUnitsPerCm * 10.0);
+    return QPageSize(mm, QPageSize::Millimeter, QStringLiteral("ClassBoard page"), QPageSize::ExactMatch);
+}
 
 QString xmlEscape(const QString& s)
 {
@@ -125,7 +132,7 @@ bool PdfExporter::exportPages(const DocumentSnapshot& snapshot, const QString& p
         QPdfWriter writer(&file);
         writer.setCreator(QStringLiteral("ClassBoard"));
         writer.setTitle(snapshot.metadata.title.isEmpty() ? QStringLiteral("ClassBoard lesson") : snapshot.metadata.title);
-        writer.setPageSize(QPageSize(QSizeF(kPageWidthMm, kPageHeightMm), QPageSize::Millimeter, QStringLiteral("ClassBoard 16:9")));
+        writer.setPageSize(pageSizeFor(snapshot.pages.front()->exportRect()));
         writer.setPageMargins(QMarginsF(0, 0, 0, 0));
         writer.setResolution(144);
         QPainter painter;
@@ -137,10 +144,13 @@ bool PdfExporter::exportPages(const DocumentSnapshot& snapshot, const QString& p
         }
         const int total = static_cast<int>(snapshot.pages.size());
         for (int i = 0; i < total; ++i) {
-            if (i > 0)
-                writer.newPage();
             const Page& page = *snapshot.pages[static_cast<size_t>(i)];
+            // The complete logical page, rendered from document coordinates (never the view).
             const QRectF area = page.exportRect();
+            if (i > 0) {
+                writer.setPageSize(pageSizeFor(area));
+                writer.newPage();
+            }
             const qreal s = std::min(writer.width() / area.width(), writer.height() / area.height());
             painter.save();
             painter.scale(s, s);
@@ -171,8 +181,21 @@ bool PdfExporter::exportPages(const DocumentSnapshot& snapshot, const QString& p
 
 QByteArray PptxExporter::buildPackage(const QVector<QByteArray>& slidePngs, const QString& title)
 {
+    QVector<Slide> slides;
+    for (const QByteArray& png : slidePngs)
+        slides.push_back({png, QSize(16, 9), QColor(Qt::white)});
+    return buildPackage(slides, title);
+}
+
+QByteArray PptxExporter::buildPackage(const QVector<Slide>& slides, const QString& title)
+{
     ZipWriter zip;
-    const int n = slidePngs.size();
+    const int n = slides.size();
+    // Slide size follows the first page; pages with another aspect ratio are fitted whole.
+    const QSize first = n > 0 && !slides.front().pixelSize.isEmpty() ? slides.front().pixelSize : QSize(16, 9);
+    const QSize slideEmu = slideSize(slides);
+    const qint64 slideCx = slideEmu.width();
+    const qint64 slideCy = slideEmu.height();
 
     // [Content_Types].xml
     QByteArray types(kXmlHeader);
@@ -226,8 +249,8 @@ QByteArray PptxExporter::buildPackage(const QVector<QByteArray>& slidePngs, cons
     for (int i = 0; i < n; ++i)
         pres += QStringLiteral("<p:sldId id=\"%1\" r:id=\"rId%2\"/>").arg(256 + i).arg(i + 3).toUtf8();
     pres += QStringLiteral("</p:sldIdLst><p:sldSz cx=\"%1\" cy=\"%2\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/></p:presentation>")
-                .arg(kSlideCx)
-                .arg(kSlideCy)
+                .arg(slideCx)
+                .arg(slideCy)
                 .toUtf8();
     zip.addFile(QStringLiteral("ppt/presentation.xml"), pres);
 
@@ -266,27 +289,58 @@ QByteArray PptxExporter::buildPackage(const QVector<QByteArray>& slidePngs, cons
                 rels({{kRelBase + QStringLiteral("slideMaster"), QStringLiteral("../slideMasters/slideMaster1.xml")}}));
     zip.addFile(QStringLiteral("ppt/theme/theme1.xml"), themeXml());
 
-    // Slides: one full-bleed picture each.
+    // Slides: one picture of the complete page each, fitted without cropping or stretching.
     for (int i = 1; i <= n; ++i) {
+        const Slide& s = slides[i - 1];
+        const QRect pic = pictureRect(slideEmu, s.pixelSize.isEmpty() ? first : s.pixelSize);
+        const qint64 cx = pic.width();
+        const qint64 cy = pic.height();
+        const qint64 x = pic.x();
+        const qint64 y = pic.y();
+        const QString bg = s.background.isValid() ? s.background.name(QColor::HexRgb).mid(1).toUpper() : QStringLiteral("FFFFFF");
         QByteArray slide(kXmlHeader);
-        slide += QStringLiteral("<p:sld %1><p:cSld><p:spTree>%2"
+        slide += QStringLiteral("<p:sld %1><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val=\"%6\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>%2"
                                 "<p:pic><p:nvPicPr><p:cNvPr id=\"2\" name=\"Page %3\"/><p:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>"
                                 "<p:blipFill><a:blip r:embed=\"rId2\"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>"
-                                "<p:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"%4\" cy=\"%5\"/></a:xfrm>"
+                                "<p:spPr><a:xfrm><a:off x=\"%7\" y=\"%8\"/><a:ext cx=\"%4\" cy=\"%5\"/></a:xfrm>"
                                 "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>"
                                 "</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>")
                      .arg(QString::fromLatin1(kNs), QString::fromLatin1(kEmptyGroup))
                      .arg(i)
-                     .arg(kSlideCx)
-                     .arg(kSlideCy)
+                     .arg(cx)
+                     .arg(cy)
+                     .arg(bg)
+                     .arg(x)
+                     .arg(y)
                      .toUtf8();
         zip.addFile(QStringLiteral("ppt/slides/slide%1.xml").arg(i), slide);
         zip.addFile(QStringLiteral("ppt/slides/_rels/slide%1.xml.rels").arg(i),
                     rels({{kRelBase + QStringLiteral("slideLayout"), QStringLiteral("../slideLayouts/slideLayout1.xml")},
                           {kRelBase + QStringLiteral("image"), QStringLiteral("../media/image%1.png").arg(i)}}));
-        zip.addFile(QStringLiteral("ppt/media/image%1.png").arg(i), slidePngs[i - 1], false);
+        zip.addFile(QStringLiteral("ppt/media/image%1.png").arg(i), s.png, false);
     }
     return zip.finish();
+}
+
+QSize PptxExporter::slideSize(const QVector<Slide>& slides)
+{
+    const QSize first = !slides.isEmpty() && !slides.front().pixelSize.isEmpty() ? slides.front().pixelSize : QSize(16, 9);
+    const qint64 cy = std::clamp<qint64>(qRound64(double(kSlideCx) * first.height() / first.width()), 914400, 51206400);
+    return QSize(static_cast<int>(kSlideCx), static_cast<int>(cy));
+}
+
+QRect PptxExporter::pictureRect(const QSize& slide, const QSize& px)
+{
+    if (px.isEmpty())
+        return QRect(QPoint(0, 0), slide);
+    qint64 cx = slide.width();
+    qint64 cy = qRound64(double(cx) * px.height() / px.width());
+    if (cy > slide.height()) {
+        cy = slide.height();
+        cx = qRound64(double(cy) * px.width() / px.height());
+    }
+    return QRect(static_cast<int>((slide.width() - cx) / 2), static_cast<int>((slide.height() - cy) / 2), static_cast<int>(cx),
+                 static_cast<int>(cy));
 }
 
 bool PptxExporter::exportPages(const DocumentSnapshot& snapshot, const QString& path, QString* error,
@@ -297,16 +351,16 @@ bool PptxExporter::exportPages(const DocumentSnapshot& snapshot, const QString& 
             *error = tr("There are no pages to export.");
         return false;
     }
-    QVector<QByteArray> pngs;
+    QVector<Slide> slides;
     const int total = static_cast<int>(snapshot.pages.size());
     for (int i = 0; i < total; ++i) {
-        const QImage image = ImageExporter::renderPage(*snapshot.pages[static_cast<size_t>(i)], snapshot.images,
-                                                       snapshot.coordinates, 2560);
+        const Page& page = *snapshot.pages[static_cast<size_t>(i)];
+        const QImage image = ImageExporter::renderPage(page, snapshot.images, snapshot.coordinates, 2560);
         QByteArray bytes;
         QBuffer buffer(&bytes);
         buffer.open(QIODevice::WriteOnly);
         image.save(&buffer, "PNG");
-        pngs.push_back(bytes);
+        slides.push_back({bytes, image.size(), page.background().background});
         if (progress && !progress(i + 1, total + 1)) {
             if (error)
                 *error = tr("Export cancelled.");
@@ -320,7 +374,7 @@ bool PptxExporter::exportPages(const DocumentSnapshot& snapshot, const QString& 
             *error = file.errorString();
         return false;
     }
-    file.write(buildPackage(pngs, title));
+    file.write(buildPackage(slides, title));
     if (!file.commit()) {
         if (error)
             *error = file.errorString();
@@ -336,9 +390,14 @@ bool PptxExporter::exportPages(const DocumentSnapshot& snapshot, const QString& 
 QImage ImageExporter::renderPage(const Page& page, const ImageStore& images, const CoordinateSystem& coordinates,
                                  int pixelWidth)
 {
+    // The long side gets pixelWidth pixels so portrait pages are as sharp as landscape ones.
     const QRectF area = page.exportRect();
-    const int h = qRound(pixelWidth * area.height() / area.width());
-    return PageRenderer::renderToImage(page, area, QSize(pixelWidth, h), images, coordinates, true);
+    QSize size;
+    if (area.width() >= area.height())
+        size = QSize(pixelWidth, std::max(1, qRound(pixelWidth * area.height() / area.width())));
+    else
+        size = QSize(std::max(1, qRound(pixelWidth * area.width() / area.height())), pixelWidth);
+    return PageRenderer::renderToImage(page, area, size, images, coordinates, true);
 }
 
 bool ImageExporter::exportPage(const DocumentSnapshot& snapshot, int index, const QString& path, QString* error)

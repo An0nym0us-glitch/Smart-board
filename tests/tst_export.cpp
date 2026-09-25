@@ -5,12 +5,18 @@
 #include "export/Exporters.h"
 #include "export/ZipWriter.h"
 #include "app/ExportController.h"
+#include "document/Commands.h"
+#include "document/PageOperations.h"
+#include "document/PageSize.h"
+#include "storage/PageImport.h"
 #include "storage/PdfImporter.h"
 
-#include <QSignalSpy>
-
 #include <QFile>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QUrl>
 #include <QtTest>
 
 using namespace cb;
@@ -42,6 +48,59 @@ QStringList zipEntries(const QByteArray& zip)
         pos += 46 + nameLen + extra + comment;
     }
     return names;
+}
+
+/// Page sizes (points) of a PDF, read from its /MediaBox entries.
+QVector<QSizeF> mediaBoxes(const QString& path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    const QByteArray bytes = f.readAll();
+    // Binary PDF data contains NUL bytes: convert the whole buffer, not up to the first NUL.
+    const QString text = QString::fromLatin1(bytes.constData(), bytes.size());
+    QVector<QSizeF> out;
+    QRegularExpression re(QStringLiteral("/MediaBox \\[\\s*([-0-9.]+)\\s+([-0-9.]+)\\s+([-0-9.]+)\\s+([-0-9.]+)\\s*\\]"));
+    auto it = re.globalMatch(text);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        out.push_back(QSizeF(m.captured(3).toDouble() - m.captured(1).toDouble(), m.captured(4).toDouble() - m.captured(2).toDouble()));
+    }
+    return out;
+}
+
+template <typename Importer>
+QVector<ImportedPage> runImport(Importer& importer, const QString& path, QString* error, int timeoutMs)
+{
+    QSignalSpy finished(&importer, &Importer::finished);
+    importer.start(path, 60);
+    if (!finished.wait(timeoutMs)) {
+        if (error)
+            *error = QStringLiteral("timeout");
+        return {};
+    }
+    if (error)
+        *error = finished.first().at(1).toString();
+    return finished.first().at(0).template value<QVector<ImportedPage>>();
+}
+
+QVector<ImportedPage> importPdf(const QString& path, QString* error = nullptr)
+{
+    PdfImporter importer;
+    return runImport(importer, path, error, 30000);
+}
+
+QVector<ImportedPage> importPresentation(const QString& path, QString* error = nullptr)
+{
+    PresentationImporter importer;
+    return runImport(importer, path, error, 180000);
+}
+
+std::vector<ObjectPtr> oneObject(ObjectPtr o)
+{
+    std::vector<ObjectPtr> v;
+    v.push_back(std::move(o));
+    return v;
 }
 
 std::unique_ptr<DocumentSnapshot> sample()
@@ -131,22 +190,218 @@ private slots:
         QVERIFY(PdfExporter::exportPages(*sample(), dir + QStringLiteral("/sample.pdf"), &error));
     }
 
+    void pdfPagesKeepTheirLogicalSize()
+    {
+        // Each PDF page has the page's own size: 16:9 board = 48 × 27 cm, A4 portrait = 21 × 29.7 cm.
+        Document doc;
+        pageops::newPage(doc, 0);
+        pageops::setPageSize(doc, {1}, pagesize::sizeFor(pagesize::Preset::A4, pagesize::Orientation::Portrait));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sizes.pdf"));
+        QVERIFY(PdfExporter::exportPages(*doc.snapshot(), path, nullptr));
+        const QVector<QSizeF> boxes = mediaBoxes(path);
+        QCOMPARE(boxes.size(), 2);
+        QVERIFY2(std::abs(boxes[0].width() - 480 / 25.4 * 72) < 1.5 && std::abs(boxes[0].height() - 270 / 25.4 * 72) < 1.5,
+                 qPrintable(QStringLiteral("%1 x %2").arg(boxes[0].width()).arg(boxes[0].height())));
+        QVERIFY2(std::abs(boxes[1].width() - 595.3) < 1.5 && std::abs(boxes[1].height() - 841.9) < 1.5,
+                 qPrintable(QStringLiteral("%1 x %2").arg(boxes[1].width()).arg(boxes[1].height())));
+    }
+
+    void pptxSlidesFollowThePageAspect()
+    {
+        // First page A4 landscape: the slide gets that aspect; a 16:9 page is fitted whole.
+        Document doc;
+        pageops::setPageSize(doc, {0}, pagesize::sizeFor(pagesize::Preset::A4, pagesize::Orientation::Landscape));
+        pageops::newPage(doc, 0);
+        pageops::setPageSize(doc, {1}, pagesize::sizeFor(pagesize::Preset::Board16x9, pagesize::Orientation::Landscape));
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("aspect.pptx"));
+        QVERIFY(PptxExporter::exportPages(*doc.snapshot(), path, nullptr));
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray zip = f.readAll();
+        QVERIFY(zipEntries(zip).contains(QStringLiteral("ppt/slides/slide2.xml")));
+        const QVector<PptxExporter::Slide> slides = {{QByteArray("png"), QSize(1188, 840), Qt::white},
+                                                     {QByteArray("png"), QSize(1920, 1080), Qt::black}};
+        const QSize slide = PptxExporter::slideSize(slides);
+        QCOMPARE(slide.width(), 12192000);
+        QVERIFY(std::abs(slide.width() / double(slide.height()) - 1188.0 / 840.0) < 1e-4);
+        // The A4 page fills the slide exactly; the 16:9 page is fitted whole (full width, centred).
+        QCOMPARE(PptxExporter::pictureRect(slide, QSize(1188, 840)), QRect(QPoint(0, 0), slide));
+        const QRect wide = PptxExporter::pictureRect(slide, QSize(1920, 1080));
+        QCOMPARE(wide.width(), slide.width());
+        QVERIFY(std::abs(wide.width() / double(wide.height()) - 16.0 / 9.0) < 1e-4);
+        QVERIFY(wide.top() > 0 && wide.bottom() < slide.height());
+        // Default 16:9 lesson: standard 13.333 × 7.5 inch slide.
+        QCOMPARE(PptxExporter::slideSize({{QByteArray(), QSize(1920, 1080), Qt::white}}), QSize(12192000, 6858000));
+    }
+
+    void exportRendersTheCompleteLogicalPage()
+    {
+        // The PNG covers the whole page (content at the corners included), independent of any view.
+        Document doc;
+        Page* page = doc.currentPage();
+        InkStyle ink;
+        ink.width = 20;
+        ink.color = Qt::red;
+        page->insertObject(0, StrokeObject::fromPagePoints({{QPointF(5, 5), 1}, {QPointF(40, 5), 1}}, ink));
+        page->insertObject(1, StrokeObject::fromPagePoints({{QPointF(1880, 1075), 1}, {QPointF(1915, 1075), 1}}, ink));
+        const QImage img = ImageExporter::renderPage(*page, doc.images(), doc.coordinates(), 1920);
+        QCOMPARE(img.size(), QSize(1920, 1080));
+        QCOMPARE(img.pixelColor(20, 5).red(), 255);
+        QCOMPARE(img.pixelColor(1900, 1075).red(), 255);
+        // A4 portrait page: portrait image with the page's aspect ratio.
+        Document a4doc;
+        pageops::setPageSize(a4doc, {0}, pagesize::sizeFor(pagesize::Preset::A4, pagesize::Orientation::Portrait));
+        page = a4doc.currentPage();
+        page->insertObject(0, StrokeObject::fromPagePoints({{QPointF(10, 1180), 1}, {QPointF(60, 1180), 1}}, ink));
+        const QImage a4 = ImageExporter::renderPage(*page, a4doc.images(), a4doc.coordinates(), 1188);
+        QCOMPARE(a4.size(), QSize(840, 1188));
+        QCOMPARE(a4.pixelColor(30, 1180).red(), 255);
+    }
+
     void pdfImportRoundTrip()
     {
         if (!PdfImporter::isAvailable())
             QSKIP("No PDF backend (Qt PDF or Poppler's pdftoppm) on this machine");
+        // Export a 16:9 page and an A4 page, import them again, edit, export again.
+        Document source;
+        pageops::newPage(source, 0);
+        pageops::setPageSize(source, {1}, pagesize::sizeFor(pagesize::Preset::A4, pagesize::Orientation::Portrait));
+        source.page(1)->insertObject(0, TextObject::create(QStringLiteral("Worksheet"), QPointF(420, 200), TextFormat()));
         QTemporaryDir dir;
         const QString path = dir.filePath(QStringLiteral("roundtrip.pdf"));
-        QVERIFY(PdfExporter::exportPages(*sample(), path, nullptr));
-        PdfImporter importer;
-        QSignalSpy finished(&importer, &PdfImporter::finished);
-        importer.start(path, 50);
-        QVERIFY(finished.wait(20000));
-        const auto pages = finished.first().at(0).value<QVector<QImage>>();
-        QVERIFY2(finished.first().at(1).toString().isEmpty(), qPrintable(finished.first().at(1).toString()));
+        QVERIFY(PdfExporter::exportPages(*source.snapshot(), path, nullptr));
+
+        const QVector<ImportedPage> pages = importPdf(path);
         QCOMPARE(pages.size(), 2);
-        // 16:9 pages rendered at 50 dpi.
-        QVERIFY(qAbs(pages.first().width() / double(pages.first().height()) - 16.0 / 9.0) < 0.02);
+        QVERIFY(std::abs(pages[0].sizeMm.width() - 480) < 2 && std::abs(pages[0].sizeMm.height() - 270) < 2);
+        QVERIFY(std::abs(pages[1].sizeMm.width() - 210) < 2 && std::abs(pages[1].sizeMm.height() - 297) < 2);
+
+        Document doc;
+        QCOMPARE(insertImportedPages(doc, 0, pages, QStringLiteral("roundtrip"), ImportSizing::Physical, QStringLiteral("Import PDF")), 2);
+        QCOMPARE(doc.pageCount(), 3);
+        // Dimensions and aspect ratio preserved, the whole source page shown, not stretched.
+        const Page* a4 = doc.page(2);
+        QVERIFY(std::abs(a4->size().width() - 840) < 4 && std::abs(a4->size().height() - 1188) < 6);
+        QCOMPARE(a4->objectCount(), 1);
+        const QRectF imageBounds = a4->objectAt(0)->sceneBounds();
+        QVERIFY(std::abs(imageBounds.width() - a4->size().width()) < 0.5);
+        QVERIFY(std::abs(imageBounds.height() - a4->size().height()) < 0.5);
+        const double imageAspect = pages[1].pixelSize.width() / double(pages[1].pixelSize.height());
+        QVERIFY(std::abs(a4->size().width() / a4->size().height() - imageAspect) < 1e-6);
+        QCOMPARE(a4->background().background, QColor(Qt::white));
+        // One undo step removes the import.
+        doc.commands().undo();
+        QCOMPARE(doc.pageCount(), 1);
+        doc.commands().redo();
+
+        // Edit (write on the imported page) and export again: same page sizes, annotations included.
+        InkStyle ink;
+        ink.color = Qt::blue;
+        ink.width = 12;
+        doc.commands().push(std::make_unique<AddObjectsCommand>(
+            doc.page(2)->id(), oneObject(StrokeObject::fromPagePoints({{QPointF(100, 100), 1}, {QPointF(700, 100), 1}}, ink))));
+        const QString again = dir.filePath(QStringLiteral("again.pdf"));
+        QVERIFY(PdfExporter::exportPages(*doc.snapshot({1, 2}), again, nullptr));
+        const QVector<QSizeF> boxes = mediaBoxes(again);
+        QCOMPARE(boxes.size(), 2);
+        QVERIFY(std::abs(boxes[1].width() - 595.3) < 3 && std::abs(boxes[1].height() - 841.9) < 4);
+        const QImage png = ImageExporter::renderPage(*doc.page(2), doc.images(), doc.coordinates(), 1188);
+        QCOMPARE(png.pixelColor(400, 100).blue(), 255);
+    }
+
+    void invalidPdfReportsAnError()
+    {
+        if (!PdfImporter::isAvailable())
+            QSKIP("No PDF backend on this machine");
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("broken.pdf"));
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("This is not a PDF file at all.");
+        f.close();
+        QString error;
+        const QVector<ImportedPage> pages = importPdf(path, &error);
+        QVERIFY(pages.isEmpty());
+        QVERIFY2(error.contains(QStringLiteral("could not be opened")), qPrintable(error));
+        // Missing file.
+        importPdf(dir.filePath(QStringLiteral("missing.pdf")), &error);
+        QVERIFY(error.contains(QStringLiteral("does not exist")));
+    }
+
+    void pptxImport()
+    {
+        if (!PresentationImporter::isAvailable())
+            QSKIP("No PowerPoint or LibreOffice converter on this machine");
+        // A real 3-slide 4:3 presentation written by ClassBoard's own exporter.
+        Document source;
+        pageops::setPageSize(source, {0}, pagesize::sizeFor(pagesize::Preset::Board4x3, pagesize::Orientation::Landscape));
+        pageops::newPage(source, 0);
+        pageops::newPage(source, 1);
+        pageops::setPageSize(source, {}, pagesize::sizeFor(pagesize::Preset::Board4x3, pagesize::Orientation::Landscape));
+        QTemporaryDir dir;
+        const QString pptx = dir.filePath(QStringLiteral("slides.pptx"));
+        QVERIFY(PptxExporter::exportPages(*source.snapshot(), pptx, nullptr));
+        QString error;
+        const QVector<ImportedPage> pages = importPresentation(pptx, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(pages.size(), 3);
+        for (const ImportedPage& p : pages)
+            QVERIFY2(std::abs(p.pixelSize.width() / double(p.pixelSize.height()) - 4.0 / 3.0) < 0.01,
+                     qPrintable(QStringLiteral("%1x%2").arg(p.pixelSize.width()).arg(p.pixelSize.height())));
+        Document doc;
+        QCOMPARE(insertImportedPages(doc, 0, pages, QStringLiteral("slides"), ImportSizing::BoardSized, QStringLiteral("Import")), 3);
+        QCOMPARE(doc.page(1)->size().width(), 1920.0);
+        QVERIFY(std::abs(doc.page(1)->size().height() - 1440) < 1440 * 0.005); // 4:3 within pixel rounding
+        // Round trip: export the imported slides again as a presentation.
+        QVERIFY(PptxExporter::exportPages(*doc.snapshot({1, 2, 3}), dir.filePath(QStringLiteral("back.pptx")), nullptr));
+    }
+
+    void pptImport()
+    {
+        if (!PresentationImporter::isAvailable() || PresentationImporter::availableConverter() != PresentationImporter::Converter::LibreOffice)
+            QSKIP("Needs LibreOffice to create the legacy .ppt test file");
+        QTemporaryDir dir;
+        const QString pptx = dir.filePath(QStringLiteral("legacy.pptx"));
+        QVERIFY(PptxExporter::exportPages(*sample(), pptx, nullptr));
+        // Make a binary PowerPoint 97-2003 file from it.
+        QProcess convert;
+        convert.start(PresentationImporter::libreOfficePath(),
+                      {QStringLiteral("-env:UserInstallation=") + QUrl::fromLocalFile(dir.filePath(QStringLiteral("p"))).toString(),
+                       QStringLiteral("--headless"), QStringLiteral("--convert-to"), QStringLiteral("ppt"), QStringLiteral("--outdir"),
+                       dir.path(), pptx});
+        QVERIFY(convert.waitForFinished(120000));
+        const QString ppt = dir.filePath(QStringLiteral("legacy.ppt"));
+        QVERIFY(QFileInfo::exists(ppt));
+        QString error;
+        const QVector<ImportedPage> pages = importPresentation(ppt, &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(pages.size(), 2);
+        QVERIFY(std::abs(pages[0].pixelSize.width() / double(pages[0].pixelSize.height()) - 16.0 / 9.0) < 0.01);
+    }
+
+    void presentationImportRejectsOtherFiles()
+    {
+        QTemporaryDir dir;
+        QString error;
+        const QString txt = dir.filePath(QStringLiteral("notes.txt"));
+        QFile f(txt);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("hello");
+        f.close();
+        importPresentation(txt, &error);
+        QVERIFY(!error.isEmpty());
+        if (PresentationImporter::isAvailable()) {
+            const QString fake = dir.filePath(QStringLiteral("fake.pptx"));
+            QFile g(fake);
+            QVERIFY(g.open(QIODevice::WriteOnly));
+            g.write("not a zip");
+            g.close();
+            const QVector<ImportedPage> pages = importPresentation(fake, &error);
+            QVERIFY(pages.isEmpty());
+            QVERIFY(!error.isEmpty());
+        }
     }
 
     void pageRanges()

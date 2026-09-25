@@ -20,6 +20,7 @@ public:
 
 signals:
     void editRequested();
+    void magicRequested();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -28,6 +29,8 @@ private:
     const AppServices& m_s;
     TouchButton* m_edit = nullptr;
     TouchButton* m_color = nullptr;
+    TouchButton* m_precision = nullptr;
+    TouchButton* m_magic = nullptr;
 };
 
 } // namespace cb

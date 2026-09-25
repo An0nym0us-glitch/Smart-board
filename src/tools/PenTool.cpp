@@ -198,11 +198,13 @@ void PenTool::paintViewOverlay(QPainter& painter) const
     for (const LiveStroke& s : m_live) {
         if (s.constraint.kind != EdgeConstraint::Kind::Line || s.points.size() < 2)
             continue;
-        const Document& doc = host().document();
-        const qreal len = doc.coordinates().mathDistance(s.points.first().pos, s.points.last().pos);
+        const CoordinateSystem cs = host().document().coordinatesFor(host().page());
+        const qreal len = cs.mathDistance(s.points.first().pos, s.points.last().pos);
         const QPointF anchor = host().view().pageToView(s.points.last().pos) + QPointF(0, -host().theme().dp(40));
-        paintValueLabel(painter, anchor, geom::formatNumber(len, 1) + QLatin1Char(' ') + doc.coordinates().unitLabel(),
-                        QColor(255, 224, 130), 0.0, host().theme().dp(18));
+        QString text = geom::formatNumber(len, 1) + QLatin1Char(' ') + cs.unitLabel();
+        if (cs.usesScale())
+            text += QStringLiteral(" = ") + cs.formatLength(len);
+        paintValueLabel(painter, anchor, text, QColor(255, 224, 130), 0.0, host().theme().dp(18));
     }
 }
 

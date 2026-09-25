@@ -90,6 +90,10 @@ public:
     /// Hit test in page coordinates with a tolerance in page units.
     bool hitTest(const QPointF& pagePos, qreal tolerance) const;
 
+    /// True if pagePos lies inside a closed outline even where nothing is painted (e.g. inside an
+    /// unfilled rectangle). Used by selection as a fallback when no painted object is hit.
+    virtual bool enclosesPoint(const QPointF& pagePos) const { Q_UNUSED(pagePos); return false; }
+
     /// Returns true if the object is (mostly) inside the page-space polygon.
     virtual bool isInsidePolygon(const QPolygonF& pagePolygon) const;
 

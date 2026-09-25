@@ -1,5 +1,6 @@
 #include "canvas/PageRenderer.h"
 
+#include "document/CoordinateResolver.h"
 #include "document/DocumentObject.h"
 #include "document/ImageStore.h"
 #include "document/Page.h"
@@ -12,13 +13,14 @@ namespace cb {
 void PageRenderer::render(QPainter& painter, const Page& page, const QRectF& pageArea, qreal zoom,
                           const ImageStore& images, const CoordinateSystem& coordinates, const Options& options)
 {
+    const CoordinateSystem pageCoordinates = pageCoordinateSystem(coordinates, &page);
     if (options.drawBackground)
-        TemplateRenderer::paint(painter, page.background(), pageArea, zoom, &images, coordinates, page.frameRect());
+        TemplateRenderer::paint(painter, page.background(), pageArea, zoom, &images, pageCoordinates, page.frameRect());
 
     RenderContext ctx;
     ctx.zoom = zoom;
     ctx.images = &images;
-    ctx.coordinates = &coordinates;
+    ctx.coordinates = &pageCoordinates;
     ctx.page = &page;
     ctx.exporting = options.exporting;
 

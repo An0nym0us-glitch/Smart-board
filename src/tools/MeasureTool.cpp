@@ -188,9 +188,10 @@ void MeasureTool::paintOverlay(QPainter& painter) const
     const QVector<QPointF> pts = previewPoints();
     if (pts.size() < 2)
         return;
-    const CoordinateSystem* cs = resolveCoordinateSystem(host().page(), &host().document().coordinates(), pts);
+    const CoordinateSystem global = host().document().coordinatesFor(host().page());
+    const CoordinateSystem* cs = resolveCoordinateSystem(host().page(), &global, pts);
     MeasurementObject::paintPreview(painter, host().settings().measureKind(), pts, kMeasureColor,
-                                    cs ? *cs : host().document().coordinates(), host().view().zoom());
+                                    cs ? *cs : global, host().view().zoom());
 }
 
 void MeasureTool::paintViewOverlay(QPainter& painter) const

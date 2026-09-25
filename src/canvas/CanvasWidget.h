@@ -38,9 +38,17 @@ public:
     SelectionModel& selectionModel() { return *m_selection; }
     InputManager& input() { return m_input; }
 
-    // View control
+    // View control. Zoom only changes the view transform: document coordinates, measurements and
+    // exports are never affected. 100 % = one document unit per device independent pixel.
     void fitPage();
+    /// Fits the page width into the view (page top at the top of the view).
+    void fitWidth();
     void zoomBy(qreal factor);
+    /// Sets an exact zoom (1.0 = 100 %) keeping the centre of the view in place.
+    void setZoom(qreal zoom);
+    /// Moves to the next larger (direction > 0) or smaller zoom preset.
+    void zoomStep(int direction);
+    static const QVector<qreal>& zoomPresets();
     qreal zoom() const { return m_view.zoom(); }
     QPointF viewCenterInPage() const;
     QRect pageRectToWidget(const QRectF& pageRect) const;

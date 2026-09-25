@@ -166,7 +166,8 @@ private slots:
         QTest::addColumn<QString>("key");
         for (const char* k : {"more", "pen", "eraser", "select", "shapes", "geometry", "measure", "equation", "function",
                               "text", "table", "lesson", "templates", "import", "export", "pdf", "pptx", "settings",
-                              "pages", "color"})
+                              "pages", "color", "insert", "edit", "pageactions", "pagesize", "background", "view",
+                              "scale"})
             QTest::newRow(k) << QString::fromLatin1(k);
     }
     void popovers()

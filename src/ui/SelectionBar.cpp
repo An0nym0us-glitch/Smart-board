@@ -10,6 +10,7 @@
 #include "tools/ToolController.h"
 #include "ui/Popover.h"
 #include "ui/UiContext.h"
+#include "ui/popovers/PropertiesPanel.h"
 #include "ui/widgets/TouchButton.h"
 
 #include <QHBoxLayout>
@@ -34,6 +35,11 @@ SelectionBar::SelectionBar(const AppServices& s, QWidget* canvas)
     };
     const AppServices* sp = &s;
     m_edit = add(QStringLiteral("edit"), tr("Edit"), [this]() { emit editRequested(); });
+    m_precision = add(QStringLiteral("precision"), tr("Exact values (length, angle, slope, size)"), [this]() { emit editRequested(); });
+    m_precision->setObjectName(QStringLiteral("precision"));
+    m_magic = add(QStringLiteral("magic"), tr("✨ Magic Equation Maker: turn this handwriting into an equation"),
+                  [this]() { emit magicRequested(); });
+    m_magic->setObjectName(QStringLiteral("magic"));
     m_color = add(QStringLiteral("palette"), tr("Colour"), [sp, this]() { sp->popovers.open(QStringLiteral("color"), m_color); });
     add(QStringLiteral("bring-front"), tr("Bring to front"), [sp]() { sp->edit.bringToFront(); });
     add(QStringLiteral("send-back"), tr("Send to back"), [sp]() { sp->edit.sendToBack(); });
@@ -58,6 +64,8 @@ void SelectionBar::refresh()
     Page* page = m_s.doc.currentPage();
     bool editable = false;
     bool colorable = false;
+    bool precise = false;
+    bool handwriting = page != nullptr;
     if (page) {
         for (const ObjectId& id : sel.ids()) {
             DocumentObject* o = page->object(id);
@@ -65,11 +73,17 @@ void SelectionBar::refresh()
                 continue;
             if (sel.count() == 1 && o->isEditable())
                 editable = true;
+            if (sel.count() == 1 && PropertiesPanel::supports(*o))
+                precise = true;
             if (o->color().isValid())
                 colorable = true;
+            if (o->type() != ObjectType::Stroke)
+                handwriting = false;
         }
     }
     m_edit->setVisible(editable);
+    m_precision->setVisible(precise);
+    m_magic->setVisible(handwriting);
     m_color->setVisible(colorable);
     adjustSize();
 

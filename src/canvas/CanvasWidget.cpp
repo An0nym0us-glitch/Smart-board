@@ -119,9 +119,61 @@ void CanvasWidget::fitPage()
     viewUpdated();
 }
 
+void CanvasWidget::fitWidth()
+{
+    if (!page() || width() < 10 || height() < 10)
+        return;
+    const QRectF frame = page()->frameRect();
+    const qreal margin = m_ui.theme.dp(20);
+    const qreal zoom = std::clamp((width() - 2 * margin) / frame.width(), ViewTransform::kMinZoom, ViewTransform::kMaxZoom);
+    m_view.setZoom(zoom);
+    m_view.setOffset(QPointF((width() - frame.width() * zoom) / 2.0 - frame.left() * zoom, margin - frame.top() * zoom));
+    m_viewInitialised = true;
+    m_interactiveZoom = false;
+    invalidateAll();
+    viewUpdated();
+}
+
 void CanvasWidget::zoomBy(qreal factor)
 {
     zoomView(QPointF(width() / 2.0, height() / 2.0), factor, false);
+}
+
+void CanvasWidget::setZoom(qreal zoom)
+{
+    zoom = std::clamp(zoom, ViewTransform::kMinZoom, ViewTransform::kMaxZoom);
+    if (m_view.zoom() <= 0)
+        return;
+    zoomView(QPointF(width() / 2.0, height() / 2.0), zoom / m_view.zoom(), false);
+}
+
+const QVector<qreal>& CanvasWidget::zoomPresets()
+{
+    static const QVector<qreal> presets = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5};
+    return presets;
+}
+
+void CanvasWidget::zoomStep(int direction)
+{
+    const qreal current = m_view.zoom();
+    const auto& presets = zoomPresets();
+    if (direction > 0) {
+        for (qreal z : presets) {
+            if (z > current + 1e-6) {
+                setZoom(z);
+                return;
+            }
+        }
+        setZoom(current * 1.25);
+    } else {
+        for (auto it = presets.rbegin(); it != presets.rend(); ++it) {
+            if (*it < current - 1e-6) {
+                setZoom(*it);
+                return;
+            }
+        }
+        setZoom(current * 0.8);
+    }
 }
 
 QPointF CanvasWidget::viewCenterInPage() const
@@ -261,8 +313,9 @@ void CanvasWidget::renderDirty()
         PageRenderer::Options options;
         options.hidden = &m_hidden;
         PageRenderer::render(painter, *p, pageArea, m_cacheView.zoom(), m_doc.images(), m_doc.coordinates(), options);
-        if (m_showFrame) {
-            QPen framePen(QColor(255, 255, 255, 60), 1.5, Qt::DashLine);
+        const bool customSize = p->size() != QSizeF(Page::kDefaultWidth, Page::kDefaultHeight);
+        if (m_showFrame || customSize) {
+            QPen framePen(p->background().isDark() ? QColor(255, 255, 255, 90) : QColor(0, 0, 0, 80), 1.5, Qt::DashLine);
             framePen.setCosmetic(true);
             painter.setPen(framePen);
             painter.setBrush(Qt::NoBrush);
@@ -302,7 +355,8 @@ void CanvasWidget::paintEvent(QPaintEvent* event)
     painter.save();
     painter.setTransform(m_view.toTransform());
     m_tools->paintOverlay(painter);
-    m_instruments->paint(painter, m_view.zoom(), &m_doc.coordinates());
+    const CoordinateSystem pageCoordinates = m_doc.coordinatesFor(page());
+    m_instruments->paint(painter, m_view.zoom(), &pageCoordinates);
     painter.restore();
 
     // View-space overlays: handles, palm eraser.

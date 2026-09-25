@@ -38,6 +38,7 @@ struct DocumentContents
     CoordinateSystem coordinates;
     DocumentMetadata metadata;
     TemplateSpec defaultTemplate;
+    QSizeF defaultPageSize{Page::kDefaultWidth, Page::kDefaultHeight};
     int currentPage = 0;
 };
 
@@ -87,12 +88,19 @@ public:
 
     CoordinateSystem& coordinates() { return m_coordinates; }
     const CoordinateSystem& coordinates() const { return m_coordinates; }
+    /// The global system as it applies to a page (origin at the page centre, shared units/scale).
+    CoordinateSystem coordinatesFor(const Page* page) const;
+    /// Changes the drawing scale (used by SetScaleCommand).
+    void setScale(const MeasureScale& scale);
 
     DocumentMetadata& metadata() { return m_metadata; }
     const DocumentMetadata& metadata() const { return m_metadata; }
 
     const TemplateSpec& defaultTemplate() const { return m_defaultTemplate; }
     void setDefaultTemplate(const TemplateSpec& spec) { m_defaultTemplate = spec; }
+    /// Logical size of new pages (document units, see PageSize.h).
+    QSizeF defaultPageSize() const { return m_defaultPageSize; }
+    void setDefaultPageSize(const QSizeF& size) { m_defaultPageSize = size; }
 
     QString filePath() const { return m_filePath; }
     void setFilePath(const QString& path);
@@ -121,6 +129,8 @@ signals:
     void contentChanged();
     void modifiedChanged(bool modified);
     void filePathChanged(const QString& path);
+    /// Units or drawing scale changed: every measurement label must be redrawn.
+    void coordinatesChanged();
     /// Emitted when the entire content was replaced (new/open).
     void documentReset();
 
@@ -134,6 +144,7 @@ private:
     CoordinateSystem m_coordinates;
     DocumentMetadata m_metadata;
     TemplateSpec m_defaultTemplate;
+    QSizeF m_defaultPageSize{Page::kDefaultWidth, Page::kDefaultHeight};
     QString m_filePath;
     quint64 m_revision = 0;
 };

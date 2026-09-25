@@ -101,8 +101,9 @@ void ConstructTool::paintOverlay(QPainter& painter) const
         return;
     const ConstructKind kind = host().settings().constructKind();
     QVector<QPointF> pts = kind == ConstructKind::Point ? QVector<QPointF>{m_current} : QVector<QPointF>{m_start, m_current};
-    const CoordinateSystem* cs = resolveCoordinateSystem(host().page(), &host().document().coordinates(), pts);
-    GeometryObject::paintPreview(painter, kind, pts, colorFor(kind), cs ? *cs : host().document().coordinates(),
+    const CoordinateSystem global = host().document().coordinatesFor(host().page());
+    const CoordinateSystem* cs = resolveCoordinateSystem(host().page(), &global, pts);
+    GeometryObject::paintPreview(painter, kind, pts, colorFor(kind), cs ? *cs : global,
                                  host().settings().showCoordinates());
 }
 

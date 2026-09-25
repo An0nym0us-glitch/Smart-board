@@ -5,6 +5,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QRect>
+#include <QVector>
+
+#include <utility>
 
 namespace cb {
 
@@ -36,7 +39,15 @@ public:
 
     /// Editors for existing objects.
     void editEquation(const ObjectId& id, const QRect& anchorRect);
+    /// Precision properties of a measurement / line / vector / shape.
+    void editProperties(const ObjectId& id, const QRect& anchorRect);
+    /// Magic Equation Maker for the given handwriting strokes.
+    void openMagicEquation(const QVector<ObjectId>& strokes, const QRect& anchorRect);
+    QVector<ObjectId> magicTargets() const { return m_magicTargets; }
     ObjectId equationTarget() const { return m_equationTarget; }
+    /// LaTeX to start the next Equation popover with (used by the Magic Equation Maker).
+    void setEquationPrefill(const QString& latex) { m_equationPrefill = latex; }
+    QString takeEquationPrefill() { return std::exchange(m_equationPrefill, QString()); }
     void clearEquationTarget() { m_equationTarget = ObjectId(); }
 
     PopoverHost& host() { return m_host; }
@@ -51,6 +62,9 @@ private:
     PopoverHost& m_host;
     const AppServices* m_services = nullptr;
     ObjectId m_equationTarget;
+    ObjectId m_propertiesTarget;
+    QString m_equationPrefill;
+    QVector<ObjectId> m_magicTargets;
 };
 
 } // namespace cb

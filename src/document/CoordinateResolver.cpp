@@ -31,4 +31,12 @@ const CoordinateSystem* resolveCoordinateSystem(const Page* page, const Coordina
     return global;
 }
 
+CoordinateSystem pageCoordinateSystem(const CoordinateSystem& global, const Page* page)
+{
+    if (!page)
+        return global;
+    const QPointF defaultCenter(Page::kDefaultWidth / 2.0, Page::kDefaultHeight / 2.0);
+    return global.translated(page->frameRect().center() - defaultCenter);
+}
+
 } // namespace cb

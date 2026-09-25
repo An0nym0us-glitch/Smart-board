@@ -6,8 +6,10 @@
 #include "core/Geometry.h"
 #include "document/Commands.h"
 #include "document/Document.h"
+#include "document/PageOperations.h"
 #include "ui/Toast.h"
 #include "ui/UiContext.h"
+#include "ui/popovers/BoardPanels.h"
 #include "ui/popovers/PanelUtil.h"
 
 #include <QHBoxLayout>
@@ -89,7 +91,11 @@ void PageGrid::paintEvent(QPaintEvent*)
         if (!page)
             return;
         p.setOpacity(opacity);
-        const QRectF thumb(r.left(), r.top(), r.width(), r.width() * 9.0 / 16.0);
+        const QRectF box(r.left(), r.top(), r.width(), r.width() * 9.0 / 16.0);
+        // Fit the page (whatever its size) into the 16:9 tile without cropping or stretching.
+        QSizeF fitted = page->size();
+        fitted.scale(box.size(), Qt::KeepAspectRatio);
+        const QRectF thumb(box.center() - QPointF(fitted.width() / 2, fitted.height() / 2), fitted);
         const QImage img = m_s.thumbnails.thumbnail(page->id());
         QPainterPath clip;
         clip.addRoundedRect(thumb, t.dp(8), t.dp(8));
@@ -183,28 +189,27 @@ PageNavigatorPanel::PageNavigatorPanel(const AppServices& s, QWidget* parent)
 
     Document& doc = s.doc;
     auto* add = panel::pill(ui, QStringLiteral("page-add"), tr("New page"), this, [sp]() {
-        Document& d = sp->doc;
-        d.commands().push(std::make_unique<InsertPageCommand>(d.currentPageIndex() + 1, d.createPage()));
+        pageops::newPage(sp->doc, sp->doc.currentPageIndex());
         sp->popovers.refresh();
     }, true);
     auto* duplicate = panel::pill(ui, QStringLiteral("duplicate"), tr("Duplicate"), this, [sp]() {
-        Document& d = sp->doc;
-        if (Page* page = d.currentPage())
-            d.commands().push(std::make_unique<InsertPageCommand>(d.currentPageIndex() + 1, page->clone(true), tr("Duplicate page")));
+        pageops::duplicatePage(sp->doc, sp->doc.currentPageIndex());
         sp->popovers.refresh();
     });
-    auto* remove = panel::pill(ui, QStringLiteral("trash"), tr("Delete"), this, [sp]() {
-        Document& d = sp->doc;
-        if (d.pageCount() <= 1) {
-            sp->toast.showMessage(tr("A lesson needs at least one page."), 2500);
-            return;
-        }
-        d.commands().push(std::make_unique<RemovePageCommand>(d.currentPageIndex()));
-        sp->toast.showActions(tr("Page deleted."), {{tr("Undo"), [sp]() { sp->doc.commands().undo(); }, true}}, 5000);
+    // Clear keeps the page and removes its content; Delete removes the page itself.
+    auto* clear = panel::pill(ui, QStringLiteral("page-clear"), tr("Clear page"), this,
+                              [sp]() { PageActionsPanel::confirmClearPage(*sp); });
+    clear->setToolTip(tr("Remove everything on this page, keep the page"));
+    clear->setEnabled(doc.currentPage() && doc.currentPage()->objectCount() > 0);
+    auto* remove = panel::pill(ui, QStringLiteral("page-delete"), tr("Delete page"), this, [sp]() {
+        PageActionsPanel::deleteCurrentPage(*sp);
         sp->popovers.refresh();
     });
+    remove->setToolTip(tr("Remove this page from the lesson"));
     remove->setDanger(true);
     remove->setEnabled(doc.pageCount() > 1);
+    layout->addWidget(panel::row(ui, {add, duplicate, clear, remove}, this));
+
     auto* left = panel::pill(ui, QStringLiteral("chevron-left"), QString(), this, [sp]() {
         Document& d = sp->doc;
         const int i = d.currentPageIndex();
@@ -223,9 +228,13 @@ PageNavigatorPanel::PageNavigatorPanel(const AppServices& s, QWidget* parent)
     });
     right->setToolTip(tr("Move page later"));
     right->setEnabled(doc.currentPageIndex() + 1 < doc.pageCount());
-    auto* background = panel::pill(ui, QStringLiteral("template"), tr("Background"), this,
-                                   [sp]() { sp->popovers.push(QStringLiteral("templates")); });
-    layout->addWidget(panel::row(ui, {add, duplicate, remove, left, right, background}, this));
+    auto* size = panel::pill(ui, QStringLiteral("page-size"), tr("Page size"), this,
+                             [sp]() { sp->popovers.push(QStringLiteral("pagesize")); });
+    auto* background = panel::pill(ui, QStringLiteral("palette"), tr("Background"), this,
+                                   [sp]() { sp->popovers.push(QStringLiteral("background")); });
+    auto* templates = panel::pill(ui, QStringLiteral("template"), tr("Templates"), this,
+                                  [sp]() { sp->popovers.push(QStringLiteral("templates")); });
+    layout->addWidget(panel::row(ui, {left, right, size, background, templates}, this));
 
     // Rename the current page inline.
     auto* name = new QLineEdit(doc.currentPage() ? doc.currentPage()->name() : QString(), this);

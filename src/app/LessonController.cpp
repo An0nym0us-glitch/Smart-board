@@ -7,6 +7,7 @@
 #include "document/ObjectFactory.h"
 #include "document/TemplateLibrary.h"
 #include "storage/AutosaveManager.h"
+#include "storage/PageImport.h"
 #include "storage/PdfImporter.h"
 #include "storage/ProjectSerializer.h"
 #include "ui/Toast.h"
@@ -282,50 +283,75 @@ void LessonController::insertImageFiles(const QStringList& paths, const QPointF&
 void LessonController::importPdf()
 {
     if (!PdfImporter::isAvailable()) {
-        m_toast.showMessage(PdfImporter::unavailableReason(), 7000);
-        return;
-    }
-    if (m_pdf) {
-        m_toast.showMessage(tr("A PDF is already being imported."), 2500);
+        m_toast.showMessage(PdfImporter::unavailableReason(), 8000);
         return;
     }
     const QString path = QFileDialog::getOpenFileName(m_window, tr("Import PDF"), startDirectory(), tr("PDF documents (*.pdf)"));
-    if (path.isEmpty())
+    if (!path.isEmpty())
+        importPdfFile(path);
+}
+
+void LessonController::importPdfFile(const QString& path)
+{
+    if (m_importing) {
+        m_toast.showMessage(tr("An import is already running."), 2500);
         return;
+    }
     rememberDirectory(path);
-    m_pdf = new PdfImporter(this);
+    m_importing = true;
+    auto* importer = new PdfImporter(this);
     m_toast.showProgress(tr("Converting %1").arg(QFileInfo(path).fileName()), -1);
-    connect(m_pdf, &PdfImporter::finished, this, [this, path](const QVector<QImage>& pages, const QString& error) {
-        m_pdf->deleteLater();
-        m_pdf = nullptr;
-        if (!error.isEmpty() || pages.isEmpty()) {
-            m_toast.showMessage(error.isEmpty() ? tr("The PDF is empty.") : error, 6000);
-            return;
-        }
-        auto macro = std::make_unique<CompositeCommand>(tr("Import PDF"));
-        int index = m_doc.currentPageIndex() + 1;
-        const QString base = QFileInfo(path).completeBaseName();
-        for (int i = 0; i < pages.size(); ++i) {
-            const QString key = m_doc.images().addImage(pages[i]);
-            if (key.isEmpty())
-                continue;
-            PagePtr page = m_doc.createPage();
-            TemplateSpec spec;
-            spec.id = QStringLiteral("pdf");
-            spec.name = QStringLiteral("PDF");
-            spec.kind = TemplateKind::Image;
-            spec.background = QColor(255, 255, 255);
-            spec.imageKey = key;
-            page->setBackground(spec);
-            page->setName(QStringLiteral("%1 p.%2").arg(base).arg(i + 1));
-            auto cmd = std::make_unique<InsertPageCommand>(index++, std::move(page));
-            cmd->redo(m_doc);
-            macro->add(std::move(cmd));
-        }
-        m_doc.commands().pushApplied(std::move(macro));
-        m_toast.showMessage(tr("Imported %n PDF page(s). Choose a dark pen colour to annotate.", "", pages.size()), 4000);
+    connect(importer, &PdfImporter::finished, this, [this, importer, path](const QVector<ImportedPage>& pages, const QString& error) {
+        importer->deleteLater();
+        finishImport(pages, error, QFileInfo(path).completeBaseName(), ImportSizing::Physical, tr("Import PDF"));
     });
-    m_pdf->start(path);
+    importer->start(path);
+}
+
+void LessonController::importPresentation()
+{
+    if (!PresentationImporter::isAvailable()) {
+        m_toast.showMessage(PresentationImporter::unavailableReason(), 8000);
+        return;
+    }
+    const QString path = QFileDialog::getOpenFileName(m_window, tr("Import PowerPoint"), startDirectory(),
+                                                      tr("Presentations (*.pptx *.ppt *.ppsx *.pps *.odp)"));
+    if (!path.isEmpty())
+        importPresentationFile(path);
+}
+
+void LessonController::importPresentationFile(const QString& path)
+{
+    if (m_importing) {
+        m_toast.showMessage(tr("An import is already running."), 2500);
+        return;
+    }
+    rememberDirectory(path);
+    m_importing = true;
+    auto* importer = new PresentationImporter(this);
+    m_toast.showProgress(tr("Converting %1 (this can take a moment)").arg(QFileInfo(path).fileName()), -1);
+    connect(importer, &PresentationImporter::finished, this,
+            [this, importer, path](const QVector<ImportedPage>& pages, const QString& error) {
+                importer->deleteLater();
+                finishImport(pages, error, QFileInfo(path).completeBaseName(), ImportSizing::BoardSized,
+                             tr("Import presentation"));
+            });
+    importer->start(path);
+}
+
+void LessonController::finishImport(const QVector<ImportedPage>& pages, const QString& error, const QString& baseName,
+                                    ImportSizing sizing, const QString& commandText)
+{
+    m_importing = false;
+    if (!error.isEmpty() || pages.isEmpty()) {
+        m_toast.showMessage(error.isEmpty() ? tr("Nothing could be imported.") : error, 8000);
+        emit importFinished(0, error.isEmpty() ? tr("Nothing could be imported.") : error);
+        return;
+    }
+    const int added = insertImportedPages(m_doc, m_doc.currentPageIndex(), pages, baseName, sizing, commandText);
+    m_toast.showMessage(tr("Imported %n page(s). Choose a dark pen colour to write on them.", "", added), 4000);
+    m_canvas.fitPage();
+    emit importFinished(added, QString());
 }
 
 void LessonController::checkRecovery()

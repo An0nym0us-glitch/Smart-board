@@ -70,27 +70,18 @@ QRectF MeasurementObject::localBounds() const
 
 QString MeasurementObject::format(MeasureKind kind, const QVector<QPointF>& pts, const CoordinateSystem& cs)
 {
-    const QString unit = cs.unitLabel();
-    auto withUnit = [&](const QString& v, const QString& suffix = QString()) {
-        return unit.isEmpty() ? v : v + QLatin1Char(' ') + unit + suffix;
-    };
     switch (kind) {
     case MeasureKind::Distance:
         if (pts.size() < 2)
             return QString();
-        return withUnit(geom::formatNumber(cs.mathDistance(pts[0], pts[1]), 2));
+        return cs.formatLength(cs.mathDistance(pts[0], pts[1]), 2);
     case MeasureKind::Angle: {
         if (pts.size() < 3)
             return QString();
-        const QPointF v = cs.toMath(pts[1]);
-        const QPointF a = cs.toMath(pts[0]) - v;
-        const QPointF b = cs.toMath(pts[2]) - v;
-        const double la = geom::length(a);
-        const double lb = geom::length(b);
-        if (la < 1e-9 || lb < 1e-9)
+        const double a = angleDegrees(pts, cs);
+        if (a < 0)
             return QString();
-        const double c = std::clamp(geom::dot(a, b) / (la * lb), -1.0, 1.0);
-        return geom::formatNumber(geom::radToDeg(std::acos(c)), 1) + QStringLiteral("°");
+        return geom::formatNumber(a, 1) + QStringLiteral("°");
     }
     case MeasureKind::Slope: {
         if (pts.size() < 2)
@@ -103,9 +94,33 @@ QString MeasurementObject::format(MeasureKind kind, const QVector<QPointF>& pts,
     case MeasureKind::Area:
         if (pts.size() < 3)
             return QString();
-        return QStringLiteral("A = ") + withUnit(geom::formatNumber(cs.mathArea(pts), 2), QStringLiteral("²"));
+        return QStringLiteral("A = ") + cs.formatArea(cs.mathArea(pts), 2) + QStringLiteral("  ·  P = ")
+            + cs.formatLength(perimeter(pts, cs), 2);
     }
     return QString();
+}
+
+double MeasurementObject::angleDegrees(const QVector<QPointF>& pts, const CoordinateSystem& cs)
+{
+    if (pts.size() < 3)
+        return -1.0;
+    const QPointF v = cs.toMath(pts[1]);
+    const QPointF a = cs.toMath(pts[0]) - v;
+    const QPointF b = cs.toMath(pts[2]) - v;
+    const double la = geom::length(a);
+    const double lb = geom::length(b);
+    if (la < 1e-9 || lb < 1e-9)
+        return -1.0;
+    const double c = std::clamp(geom::dot(a, b) / (la * lb), -1.0, 1.0);
+    return geom::radToDeg(std::acos(c));
+}
+
+double MeasurementObject::perimeter(const QVector<QPointF>& pts, const CoordinateSystem& cs)
+{
+    double sum = 0.0;
+    for (int i = 0; i < pts.size(); ++i)
+        sum += cs.mathDistance(pts[i], pts[(i + 1) % pts.size()]);
+    return pts.size() >= 3 ? sum : 0.0;
 }
 
 QString MeasurementObject::valueText(const CoordinateSystem& cs) const

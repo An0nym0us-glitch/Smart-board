@@ -2,6 +2,7 @@
 
 #include "tools/Tool.h"
 
+#include <QVector>
 #include <QWidget>
 
 namespace cb {
@@ -11,7 +12,10 @@ class TouchButton;
 
 /// The bottom command ribbon: always visible, large touch targets, the primary command centre.
 ///
-/// MORE | PEN | ERASER | SELECT | [active tool chip] | UNDO | REDO | ‹ 3 / 12 › | + PAGE | zoom | fullscreen
+/// MORE | PEN ERASER SELECT [tool] | UNDO REDO | FILE INSERT EDIT | ‹ 3 / 12 › NEW PAGE, PAGE ▾ | − 100% + FIT | full screen
+///
+/// Grouped buttons (File, Insert, Edit, Page, View) open attached popovers. When the window is too
+/// narrow the optional groups are hidden (everything stays reachable through MORE).
 class Ribbon : public QWidget
 {
     Q_OBJECT
@@ -23,9 +27,16 @@ public:
     TouchButton* eraserButton() const { return m_eraser; }
     TouchButton* selectButton() const { return m_select; }
     TouchButton* toolChip() const { return m_toolChip; }
+    TouchButton* fileButton() const { return m_file; }
+    TouchButton* insertButton() const { return m_insert; }
+    TouchButton* editButton() const { return m_edit; }
     TouchButton* pageButton() const { return m_page; }
+    TouchButton* pageMenuButton() const { return m_pageMenu; }
     TouchButton* newPageButton() const { return m_newPage; }
     TouchButton* zoomButton() const { return m_zoom; }
+    TouchButton* zoomInButton() const { return m_zoomIn; }
+    TouchButton* zoomOutButton() const { return m_zoomOut; }
+    TouchButton* fitButton() const { return m_fit; }
 
     void setActiveTool(ToolId id);
     /// Shows a chip for tools reached through MORE (shape, text, measure ...). Empty icon hides it.
@@ -47,18 +58,29 @@ signals:
     void toolChipClicked();
     void undoClicked();
     void redoClicked();
+    void fileClicked();
+    void insertClicked();
+    void editClicked();
     void previousPageClicked();
     void nextPageClicked();
     void pageIndicatorClicked();
     void newPageClicked();
+    void pageMenuClicked();
     void zoomClicked();
+    void zoomInClicked();
+    void zoomOutClicked();
+    void fitClicked();
     void fullScreenClicked();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
     TouchButton* addButton(const QString& icon, const QString& text);
+    /// Hides optional groups until everything fits into the available width.
+    void updateFit();
 
     const UiContext& m_ui;
     TouchButton* m_more = nullptr;
@@ -68,12 +90,23 @@ private:
     TouchButton* m_toolChip = nullptr;
     TouchButton* m_undo = nullptr;
     TouchButton* m_redo = nullptr;
+    TouchButton* m_file = nullptr;
+    TouchButton* m_insert = nullptr;
+    TouchButton* m_edit = nullptr;
     TouchButton* m_prev = nullptr;
     TouchButton* m_page = nullptr;
     TouchButton* m_next = nullptr;
     TouchButton* m_newPage = nullptr;
+    TouchButton* m_pageMenu = nullptr;
+    TouchButton* m_zoomOut = nullptr;
     TouchButton* m_zoom = nullptr;
+    TouchButton* m_zoomIn = nullptr;
+    TouchButton* m_fit = nullptr;
     TouchButton* m_fullScreen = nullptr;
+    QWidget* m_groupSeparator = nullptr;
+    /// Optional widgets in the order in which they are hidden when space runs out.
+    QVector<QVector<QWidget*>> m_optional;
+    bool m_fitting = false;
 };
 
 } // namespace cb

@@ -52,7 +52,8 @@ QPointF snapPoint(ToolHost& host, const QPointF& pagePos, bool* snapped, const D
     // 2. Whole coordinates on grid-like backgrounds or inside graphs.
     if (!host.settings().snapToGrid())
         return pagePos;
-    const CoordinateSystem* global = &host.document().coordinates();
+    const CoordinateSystem pageGlobal = host.document().coordinatesFor(page);
+    const CoordinateSystem* global = &pageGlobal;
     const CoordinateSystem* cs = resolveCoordinateSystem(page, global, {pagePos}, exclude);
     const TemplateKind kind = page->background().kind;
     const bool gridBackground = kind == TemplateKind::Grid || kind == TemplateKind::GraphPaper

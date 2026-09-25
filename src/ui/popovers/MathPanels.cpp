@@ -14,6 +14,7 @@
 #include "graph/TableObject.h"
 #include "math/equation/EquationObject.h"
 #include "tools/GraphTool.h"
+#include "tools/MagicEquation.h"
 #include "tools/SelectionModel.h"
 #include "tools/ToolController.h"
 #include "tools/ToolSettings.h"
@@ -213,7 +214,7 @@ EquationPanel::EquationPanel(const AppServices& s, QWidget* parent)
     m_preview = preview;
     layout->addWidget(preview);
 
-    QString initial;
+    QString initial = s.popovers.takeEquationPrefill();
     const ObjectId target = s.popovers.equationTarget();
     if (Page* page = s.doc.currentPage()) {
         if (DocumentObject* o = page->object(target); o && o->type() == ObjectType::Equation) {
@@ -270,28 +271,22 @@ EquationPanel::EquationPanel(const AppServices& s, QWidget* parent)
     auto* insert = panel::pill(ui, QStringLiteral("check"), editing ? tr("Update formula") : tr("Insert formula"), this,
                                [this]() { commit(); }, true);
     QVector<QWidget*> buttons{insert};
-    if (const EquationRecognizer* recognizer = s.recognizers.equationRecognizer()) {
-        // Offered only when an offline recogniser plug-in is installed.
+    if (!editing) {
+        // The optional Magic Equation Maker: only for handwriting the teacher selected explicitly.
         const AppServices* sp = &s;
-        auto* convert = panel::pill(ui, QStringLiteral("magic"), tr("Convert selected ink"), this, [this, sp, recognizer]() {
+        auto* magicButton = panel::pill(ui, QStringLiteral("magic"), tr("✨ Magic Equation Maker"), this, [sp]() {
             Page* page = sp->doc.currentPage();
-            if (!page)
-                return;
-            InkSample ink;
-            for (const ObjectId& id : sp->canvas.selectionModel().ids())
-                if (DocumentObject* o = page->object(id); o && o->type() == ObjectType::Stroke)
-                    ink.strokes.push_back(static_cast<StrokeObject*>(o)->pagePoints());
-            if (ink.strokes.isEmpty()) {
-                sp->toast.showMessage(tr("Select handwritten ink first."), 2500);
+            const QVector<ObjectId> ids = sp->canvas.selectionModel().ids();
+            if (!page || !magic::isHandwriting(*page, ids)) {
+                sp->toast.showMessage(tr("Write the equation, select the handwriting with SELECT, then tap ✨."), 4000);
                 return;
             }
-            const QVector<EquationCandidate> result = recognizer->recognize(ink);
-            if (result.isEmpty())
-                sp->toast.showMessage(tr("No formula recognised."), 2500);
-            else
-                m_input->setText(result.first().latex);
+            QRectF bounds;
+            for (const ObjectId& id : ids)
+                bounds = bounds.isNull() ? page->object(id)->sceneBounds() : bounds.united(page->object(id)->sceneBounds());
+            sp->popovers.openMagicEquation(ids, sp->canvas.pageRectToWidget(bounds));
         });
-        buttons.push_back(convert);
+        buttons.push_back(magicButton);
     }
     layout->addWidget(panel::row(ui, buttons, this));
     m_input->setFocus();

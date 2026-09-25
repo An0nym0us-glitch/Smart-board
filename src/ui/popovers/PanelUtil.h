@@ -4,6 +4,7 @@
 
 #include <QGridLayout>
 #include <QLabel>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QVector>
 #include <QWidget>
@@ -42,6 +43,10 @@ QWidget* tileGrid(const UiContext& ui, int columns, const QVector<Tile>& tiles, 
 /// Rounded action button.
 TouchButton* pill(const UiContext& ui, const QString& icon, const QString& text, QWidget* parent,
                   std::function<void()> action, bool primary = false);
+
+/// Grid of mutually exclusive pills (the current one is highlighted); onPick gets the index.
+QWidget* choices(const UiContext& ui, const QStringList& labels, int current, QWidget* parent,
+                 std::function<void(int)> onPick, int columns = 4, QVector<TouchButton*>* buttons = nullptr);
 
 /// Horizontal row of widgets.
 QWidget* row(const UiContext& ui, const QVector<QWidget*>& widgets, QWidget* parent, bool stretchEnd = true);

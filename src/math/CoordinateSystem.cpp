@@ -68,6 +68,45 @@ double CoordinateSystem::mathArea(const QVector<QPointF>& pagePolygon) const
     return geom::polygonArea(m);
 }
 
+double CoordinateSystem::toReal(double mathLength) const
+{
+    return usesScale() ? m_scale.toReal(mathLength, m_unitLabel) : mathLength;
+}
+
+double CoordinateSystem::fromReal(double realLength) const
+{
+    return usesScale() ? m_scale.toBoard(realLength, m_unitLabel) : realLength;
+}
+
+double CoordinateSystem::toRealArea(double mathArea) const
+{
+    const double f = toReal(1.0);
+    return mathArea * f * f;
+}
+
+QString CoordinateSystem::formatLength(double mathLength, int decimals) const
+{
+    const QString unit = realUnitLabel();
+    const QString v = geom::formatNumber(toReal(mathLength), decimals);
+    return unit.isEmpty() ? v : v + QLatin1Char(' ') + unit;
+}
+
+QString CoordinateSystem::formatArea(double mathArea, int decimals) const
+{
+    const QString unit = realUnitLabel();
+    const QString v = geom::formatNumber(toRealArea(mathArea), decimals);
+    return unit.isEmpty() ? v : v + QLatin1Char(' ') + unit + QStringLiteral("²");
+}
+
+CoordinateSystem CoordinateSystem::translated(const QPointF& pageDelta) const
+{
+    if (pageDelta.isNull())
+        return *this;
+    CoordinateSystem cs = fromTransform(QTransform::fromTranslate(-pageDelta.x(), -pageDelta.y()) * m_pageToMath, m_unitLabel);
+    cs.m_scale = m_scale;
+    return cs;
+}
+
 double CoordinateSystem::pxPerUnit() const
 {
     const QPointF a = toPage(QPointF(0, 0));
@@ -81,6 +120,8 @@ QJsonObject CoordinateSystem::toJson() const
     QJsonObject o;
     o.insert(QStringLiteral("m"), QJsonArray{t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy()});
     o.insert(QStringLiteral("unit"), m_unitLabel);
+    if (!m_scale.isIdentity())
+        o.insert(QStringLiteral("scale"), m_scale.toJson());
     return o;
 }
 
@@ -91,7 +132,10 @@ CoordinateSystem CoordinateSystem::fromJson(const QJsonObject& obj)
         return CoordinateSystem();
     QTransform t(m.at(0).toDouble(), m.at(1).toDouble(), m.at(2).toDouble(), m.at(3).toDouble(),
                  m.at(4).toDouble(), m.at(5).toDouble());
-    return fromTransform(t, obj.value(QStringLiteral("unit")).toString(QStringLiteral("cm")));
+    CoordinateSystem cs = fromTransform(t, obj.value(QStringLiteral("unit")).toString(QStringLiteral("cm")));
+    if (obj.contains(QStringLiteral("scale")))
+        cs.setScale(MeasureScale::fromJson(obj.value(QStringLiteral("scale")).toObject()));
+    return cs;
 }
 
 } // namespace cb

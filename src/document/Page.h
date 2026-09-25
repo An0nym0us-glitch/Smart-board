@@ -46,6 +46,8 @@ public:
 
     /// Topmost object hit at a page position.
     DocumentObject* topmostAt(const QPointF& pagePos, qreal tolerance) const;
+    /// Topmost object whose closed outline encloses the position (unfilled shapes).
+    DocumentObject* topmostEnclosing(const QPointF& pagePos) const;
     /// Objects whose bounds intersect the rect, in z-order.
     std::vector<DocumentObject*> objectsIntersecting(const QRectF& rect) const;
 

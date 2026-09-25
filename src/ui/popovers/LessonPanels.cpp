@@ -49,7 +49,7 @@ MorePanel::MorePanel(const AppServices& s, QWidget* parent)
     };
     InstrumentLayer& layer = s.canvas.instruments();
     const QVector<panel::Tile> tiles = {
-        {QStringLiteral("file"), tr("Lesson"), push("lesson")},
+        {QStringLiteral("file"), tr("File"), push("lesson")},
         {QStringLiteral("shapes"), tr("Shapes"), push("shapes")},
         {QStringLiteral("geometry"), tr("Geometry"), push("geometry")},
         {QStringLiteral("equation"), tr("Equation"), push("equation")},
@@ -100,11 +100,13 @@ LessonPanel::LessonPanel(const AppServices& s, QWidget* parent)
             f();
         };
     };
-    layout->addWidget(panel::tileGrid(ui, 4,
+    layout->addWidget(panel::tileGrid(ui, 3,
                                       {{QStringLiteral("file-new"), tr("New"), closeThen([sp]() { sp->lesson.newLesson(); })},
                                        {QStringLiteral("folder-open"), tr("Open"), closeThen([sp]() { sp->lesson.open(); })},
                                        {QStringLiteral("save"), tr("Save"), closeThen([sp]() { sp->lesson.save(); })},
-                                       {QStringLiteral("save-as"), tr("Save as"), closeThen([sp]() { sp->lesson.saveAs(); })}},
+                                       {QStringLiteral("save-as"), tr("Save as"), closeThen([sp]() { sp->lesson.saveAs(); })},
+                                       {QStringLiteral("import"), tr("Import"), [sp]() { sp->popovers.push(QStringLiteral("import")); }},
+                                       {QStringLiteral("export"), tr("Export"), [sp]() { sp->popovers.push(QStringLiteral("export")); }}},
                                       this));
     const QStringList recent = s.settings.recentFiles();
     if (!recent.isEmpty()) {
@@ -277,7 +279,8 @@ ImportPanel::ImportPanel(const AppServices& s, QWidget* parent)
     const AppServices* sp = &s;
     auto* layout = panel::makeLayout(ui, this);
     const bool pdf = PdfImporter::isAvailable();
-    layout->addWidget(panel::tileGrid(ui, 4,
+    const bool presentation = PresentationImporter::isAvailable();
+    layout->addWidget(panel::tileGrid(ui, 5,
                                       {{QStringLiteral("image"), tr("Images"),
                                         [sp]() {
                                             sp->popovers.close();
@@ -294,6 +297,12 @@ ImportPanel::ImportPanel(const AppServices& s, QWidget* parent)
                                             sp->lesson.importPdf();
                                         },
                                         false, pdf},
+                                       {QStringLiteral("pptx"), tr("PowerPoint"),
+                                        [sp]() {
+                                            sp->popovers.close();
+                                            sp->lesson.importPresentation();
+                                        },
+                                        false, presentation},
                                        {QStringLiteral("paste"), tr("Clipboard"),
                                         [sp]() {
                                             sp->popovers.close();
@@ -304,7 +313,9 @@ ImportPanel::ImportPanel(const AppServices& s, QWidget* parent)
                                       this));
     if (!pdf)
         layout->addWidget(panel::hint(ui, PdfImporter::unavailableReason(), this));
-    layout->addWidget(panel::hint(ui, tr("You can also drag image files onto the board."), this));
+    else if (!presentation)
+        layout->addWidget(panel::hint(ui, PresentationImporter::unavailableReason(), this));
+    layout->addWidget(panel::hint(ui, tr("You can also drag images, PDFs and presentations onto the board."), this));
 }
 
 // ========================================================================================= Export
@@ -343,6 +354,24 @@ ExportPagesPanel::ExportPagesPanel(const AppServices& s, ExportController::Forma
     const UiContext& ui = s.ui;
     const AppServices* sp = &s;
     auto* layout = panel::makeLayout(ui, this);
+    if (format == ExportController::Format::Pdf || format == ExportController::Format::Pptx) {
+        const bool pdfFormat = format == ExportController::Format::Pdf;
+        const bool available = pdfFormat ? PdfImporter::isAvailable() : PresentationImporter::isAvailable();
+        layout->addWidget(panel::section(ui, tr("Import"), this));
+        auto* import = panel::pill(ui, QStringLiteral("import"), pdfFormat ? tr("Import PDF…") : tr("Import PowerPoint…"), this,
+                                   [sp, pdfFormat]() {
+                                       sp->popovers.close();
+                                       if (pdfFormat)
+                                           sp->lesson.importPdf();
+                                       else
+                                           sp->lesson.importPresentation();
+                                   });
+        import->setEnabled(available);
+        layout->addWidget(panel::row(ui, {import}, this));
+        if (!available)
+            layout->addWidget(panel::hint(ui, pdfFormat ? PdfImporter::unavailableReason() : PresentationImporter::unavailableReason(), this));
+        layout->addWidget(panel::section(ui, tr("Export"), this));
+    }
     auto run = [sp, format](const QVector<int>& pages) {
         sp->popovers.close();
         sp->exporter.exportPages(format, pages);
@@ -371,7 +400,7 @@ ExportPagesPanel::ExportPagesPanel(const AppServices& s, ExportController::Forma
     layout->addWidget(rangeRow);
     const QString note = format == ExportController::Format::Pdf
         ? tr("Text, shapes, formulas, graphs and ink stay sharp (vector PDF).")
-        : tr("Each page becomes a 16:9 slide rendered in high resolution.");
+        : tr("Each page becomes a slide showing the complete page in high resolution.");
     layout->addWidget(panel::hint(ui, note, this));
 }
 

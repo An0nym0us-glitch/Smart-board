@@ -1,8 +1,11 @@
 #pragma once
 
+#include "storage/PageImport.h"
+
 #include <QObject>
 #include <QPointF>
 #include <QPointer>
+#include <QVector>
 
 #include <functional>
 #include <memory>
@@ -16,7 +19,6 @@ class AppSettings;
 class AutosaveManager;
 class CanvasWidget;
 class Document;
-class PdfImporter;
 class TemplateLibrary;
 class Toast;
 
@@ -44,7 +46,13 @@ public:
     void importLesson();
     void importImages();
     void insertImageFiles(const QStringList& paths, const QPointF& pageCenter);
+    /// PDF import: every PDF page becomes a page of the same size (file picker / given path).
     void importPdf();
+    void importPdfFile(const QString& path);
+    /// PowerPoint import (.ppt/.pptx): every slide becomes a page with the slide's aspect ratio.
+    void importPresentation();
+    void importPresentationFile(const QString& path);
+    bool isImporting() const { return m_importing; }
 
     /// Runs proceed() after the user saved or discarded unsaved changes (or immediately if clean).
     void confirmDiscard(std::function<void()> proceed);
@@ -55,7 +63,13 @@ public:
     static QString lessonFilter();
     static QString imageFilter();
 
+signals:
+    /// An import finished (pages added, or an error message).
+    void importFinished(int pagesAdded, const QString& error);
+
 private:
+    void finishImport(const QVector<ImportedPage>& pages, const QString& error, const QString& baseName,
+                      ImportSizing sizing, const QString& commandText);
     void writeTo(const QString& path, std::function<void(bool)> done);
     QString chooseSavePath();
     QString startDirectory() const;
@@ -69,7 +83,7 @@ private:
     CanvasWidget& m_canvas;
     QPointer<QWidget> m_window;
     std::unique_ptr<AutosaveManager> m_autosave;
-    QPointer<PdfImporter> m_pdf;
+    bool m_importing = false;
     bool m_saving = false;
 };
 

@@ -14,6 +14,7 @@
 #include "tools/ToolSettings.h"
 #include "ui/Toast.h"
 #include "ui/UiContext.h"
+#include "ui/popovers/BoardPanels.h"
 #include "ui/popovers/PanelUtil.h"
 #include "ui/widgets/SegmentedControl.h"
 #include "ui/widgets/SwatchGrid.h"
@@ -129,27 +130,9 @@ EraserPanel::EraserPanel(const AppServices& s, QWidget* parent)
     layout->addWidget(panel::hint(ui, tr("Tip: wipe with four fingers or the flat of your hand to erase anytime."), this));
 
     const AppServices* sp = &s;
-    auto* clear = panel::pill(ui, QStringLiteral("trash"), tr("Clear page"), this, [sp]() {
-        sp->popovers.close();
-        Page* page = sp->doc.currentPage();
-        if (!page || page->objectCount() == 0)
-            return;
-        ConfirmOverlay::ask(sp->ui, sp->canvas.window(), tr("Clear this page?"),
-                            tr("Everything on the page will be removed. You can undo this."),
-                            {{tr("Cancel"), {}, false, false},
-                             {tr("Clear page"),
-                              [sp]() {
-                                  Page* p = sp->doc.currentPage();
-                                  if (!p)
-                                      return;
-                                  std::vector<ObjectId> ids;
-                                  for (const auto& o : p->objects())
-                                      ids.push_back(o->id());
-                                  sp->doc.commands().push(std::make_unique<RemoveObjectsCommand>(p->id(), std::move(ids),
-                                                                                                 tr("Clear page")));
-                              },
-                              true, true}});
-    });
+    // The one Clear Page flow (also in the Page menu).
+    auto* clear = panel::pill(ui, QStringLiteral("page-clear"), tr("Clear page"), this,
+                              [sp]() { PageActionsPanel::confirmClearPage(*sp); });
     clear->setDanger(true);
     layout->addWidget(panel::row(ui, {clear}, this));
 

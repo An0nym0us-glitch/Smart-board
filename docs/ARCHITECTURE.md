@@ -67,8 +67,12 @@ QMouseEvent / QTabletEvent / QTouchEvent
 * Mouse events that the OS or Qt synthesises from touch and pen are ignored, because those
   devices are handled natively.
 * **Touch state machine.** One finger draws. A second finger that arrives while the stroke is
-  still young (under 280 ms or 7 mm of movement) cancels the stroke and starts pan/zoom. If
-  the stroke is older, the extra finger is ignored so it isn't ruined. Four or more fingers
+  still young (it has moved less than 7 mm, or it started less than 120 ms ago and is shorter
+  than 20 mm) cancels the stroke and starts pan/zoom. Otherwise the extra finger is ignored, so
+  a line that is really being drawn is never interrupted.
+* **Pen priority.** While the stylus touches the board or hovers over it (and for 400 ms
+  afterwards) new touches are ignored, so the writing hand neither draws nor palm-erases. A
+  young finger stroke is cancelled when the pen lands. Four or more fingers
   landing close together within 450 ms, or one very large contact, start *palm erase*: one
   grouped gesture that becomes one undo step. An optional multi-user mode lets every finger
   draw on its own.

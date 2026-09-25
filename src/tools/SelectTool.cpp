@@ -137,7 +137,12 @@ void SelectTool::pointerDown(const PointerEvent& e)
             }
         }
         const int h = hitResizeHandle(f, e.viewPos);
-        if (h >= 0) {
+        // On small objects the handles crowd the middle: a press inside the frame that is closer to
+        // the centre than to the handle moves the object instead of resizing it.
+        const QPointF centre = geom::midpoint(f.viewCorners[0], f.viewCorners[2]);
+        const bool preferMove = h >= 0 && f.viewCorners.containsPoint(e.viewPos, Qt::OddEvenFill)
+            && geom::distance(e.viewPos, centre) < geom::distance(e.viewPos, resizeHandles(f)[h]);
+        if (h >= 0 && !preferMove) {
             m_handle = h;
             startDrag(Mode::Resize, e);
             return;
@@ -146,6 +151,8 @@ void SelectTool::pointerDown(const PointerEvent& e)
 
     const bool additive = (e.modifiers & (Qt::ShiftModifier | Qt::ControlModifier)) || host().settings().multiSelect();
     DocumentObject* obj = host().page()->topmostAt(e.pagePos, host().viewToPageLength(theme.dp(8)));
+    if (!obj)
+        obj = host().page()->topmostEnclosing(e.pagePos); // inside an unfilled rectangle, circle ...
     if (obj) {
         m_pressedObject = obj->id();
         m_pressedWasSelected = host().selection().contains(obj->id());
@@ -408,9 +415,10 @@ void SelectTool::handleTap(const PointerEvent& e)
         && geom::distance(e.viewPos, m_lastTapView) < host().theme().dp(28) && m_lastTapObject == m_pressedObject;
     if (doubleTap) {
         m_tapTimer.invalidate();
+        // The window decides what "edit" means: text/formula/graph/table editors, or the exact
+        // values of measurements, lines, vectors and shapes.
         Page* page = host().page();
-        DocumentObject* o = page ? page->object(m_pressedObject) : nullptr;
-        if (o && o->isEditable())
+        if (page && page->object(m_pressedObject))
             host().requestEdit(m_pressedObject);
         return;
     }

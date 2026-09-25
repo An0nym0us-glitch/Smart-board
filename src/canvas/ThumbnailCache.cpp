@@ -41,7 +41,11 @@ void ThumbnailCache::processQueue()
     if (const Page* page = m_doc.pageById(id)) {
         Entry e;
         e.revision = page->revision();
-        e.image = PageRenderer::renderToImage(*page, page->frameRect(), m_size, m_doc.images(), m_doc.coordinates());
+        // Keep the page's aspect ratio (A4 pages are not squeezed into a 16:9 box).
+        QSize size = page->frameRect().size().toSize();
+        size.scale(m_size, Qt::KeepAspectRatio);
+        e.image = PageRenderer::renderToImage(*page, page->frameRect(), size.expandedTo(QSize(1, 1)), m_doc.images(),
+                                              m_doc.coordinates());
         m_entries.insert(id, e);
         emit thumbnailReady(id);
     }

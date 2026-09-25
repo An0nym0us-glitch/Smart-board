@@ -1,5 +1,7 @@
 #include "document/Document.h"
 
+#include "document/CoordinateResolver.h"
+
 #include <QFileInfo>
 
 #include <algorithm>
@@ -35,7 +37,22 @@ PagePtr Document::createPage() const
 {
     auto p = std::make_unique<Page>();
     p->setBackground(m_defaultTemplate);
+    p->setSize(m_defaultPageSize);
     return p;
+}
+
+CoordinateSystem Document::coordinatesFor(const Page* page) const
+{
+    return pageCoordinateSystem(m_coordinates, page);
+}
+
+void Document::setScale(const MeasureScale& scale)
+{
+    m_coordinates.setScale(scale);
+    for (auto& p : m_pages)
+        p->touch();
+    bump();
+    emit coordinatesChanged();
 }
 
 void Document::resetToNew(const TemplateSpec& background)
@@ -44,6 +61,7 @@ void Document::resetToNew(const TemplateSpec& background)
     m_pages.clear();
     m_images.clear();
     m_defaultTemplate = background;
+    m_defaultPageSize = QSizeF(Page::kDefaultWidth, Page::kDefaultHeight);
     m_coordinates = defaultCoordinates();
     m_metadata = DocumentMetadata();
     m_pages.push_back(createPage());
@@ -66,6 +84,7 @@ void Document::setContents(DocumentContents contents)
     m_coordinates = contents.coordinates;
     m_metadata = contents.metadata;
     m_defaultTemplate = contents.defaultTemplate;
+    m_defaultPageSize = contents.defaultPageSize;
     m_currentPage = std::clamp(contents.currentPage, 0, pageCount() - 1);
     bump();
     emit documentReset();
@@ -84,6 +103,7 @@ DocumentContents Document::copyContents() const
     c.coordinates = m_coordinates;
     c.metadata = m_metadata;
     c.defaultTemplate = m_defaultTemplate;
+    c.defaultPageSize = m_defaultPageSize;
     c.currentPage = m_currentPage;
     return c;
 }

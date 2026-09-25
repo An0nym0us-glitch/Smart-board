@@ -272,6 +272,11 @@ bool ShapeObject::hitTestLocal(const QPointF& local, qreal tolerance) const
     return stroker.createStroke(path).contains(local);
 }
 
+bool ShapeObject::enclosesPoint(const QPointF& pagePos) const
+{
+    return !isLineShape(m_kind) && outline().contains(mapFromPage(pagePos));
+}
+
 QVector<QPointF> ShapeObject::controlPoints() const
 {
     if (isLineShape(m_kind))

@@ -66,27 +66,56 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     layout->addWidget(m_undo);
     layout->addWidget(m_redo);
 
+    // File / Insert / Edit groups (popovers).
+    m_groupSeparator = new Separator(ui, this);
+    layout->addWidget(m_groupSeparator);
+    m_file = addButton(QStringLiteral("file"), tr("File"));
+    m_insert = addButton(QStringLiteral("insert"), tr("Insert"));
+    m_edit = addButton(QStringLiteral("edit"), tr("Edit"));
+    m_file->setToolTip(tr("New, open, save, import and export"));
+    m_insert->setToolTip(tr("Insert image, shape, text, graph, equation, PDF or PowerPoint"));
+    m_edit->setToolTip(tr("Cut, copy, paste, delete"));
+    for (TouchButton* b : {m_file, m_insert, m_edit}) {
+        b->setHasOptions(true);
+        layout->addWidget(b);
+    }
+
     layout->addStretch(1);
 
+    // Page group: navigation, new page and the page actions menu.
     m_prev = new TouchButton(ui, QStringLiteral("chevron-left"), tr("Previous page"), TouchButton::Style::Icon, this);
     m_page = new TouchButton(ui, QString(), QStringLiteral("1 / 1"), TouchButton::Style::Pill, this);
     m_page->setToolTip(tr("Pages"));
     m_page->setMinimumWidth(t.dpi(120));
     m_next = new TouchButton(ui, QStringLiteral("chevron-right"), tr("Next page"), TouchButton::Style::Icon, this);
-    m_newPage = addButton(QStringLiteral("page-add"), tr("Page"));
+    m_newPage = addButton(QStringLiteral("page-add"), tr("New page"));
+    m_newPage->setToolTip(tr("Add a blank page after this one"));
+    m_pageMenu = addButton(QStringLiteral("pages"), tr("Page"));
+    m_pageMenu->setHasOptions(true);
+    m_pageMenu->setToolTip(tr("New, duplicate, clear or delete page; page size and background"));
     layout->addWidget(m_prev);
     layout->addWidget(m_page);
     layout->addWidget(m_next);
     layout->addWidget(m_newPage);
+    layout->addWidget(m_pageMenu);
 
     layout->addStretch(1);
 
+    // View group: zoom out, zoom level (opens the View popover), zoom in, fit, full screen.
+    m_zoomOut = new TouchButton(ui, QStringLiteral("zoom-out"), tr("Zoom out"), TouchButton::Style::Icon, this);
     m_zoom = new TouchButton(ui, QString(), QStringLiteral("100%"), TouchButton::Style::Pill, this);
-    m_zoom->setToolTip(tr("Zoom: tap to fit the page"));
+    m_zoom->setToolTip(tr("Zoom and view: 25 % to 250 %, fit page, fit width"));
     m_zoom->setMinimumWidth(t.dpi(84));
+    m_zoomIn = new TouchButton(ui, QStringLiteral("zoom-in"), tr("Zoom in"), TouchButton::Style::Icon, this);
+    m_fit = new TouchButton(ui, QStringLiteral("fit-page"), tr("Fit page"), TouchButton::Style::Icon, this);
     m_fullScreen = new TouchButton(ui, QStringLiteral("fullscreen"), tr("Full screen"), TouchButton::Style::Icon, this);
+    layout->addWidget(m_zoomOut);
     layout->addWidget(m_zoom);
+    layout->addWidget(m_zoomIn);
+    layout->addWidget(m_fit);
     layout->addWidget(m_fullScreen);
+
+    m_optional = {{m_fit}, {m_zoomOut, m_zoomIn}, {m_edit}, {m_insert}, {m_file, m_groupSeparator}, {m_prev, m_next}};
 
     connect(m_more, &QAbstractButton::clicked, this, &Ribbon::moreClicked);
     connect(m_pen, &QAbstractButton::clicked, this, &Ribbon::penClicked);
@@ -95,12 +124,61 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     connect(m_toolChip, &QAbstractButton::clicked, this, &Ribbon::toolChipClicked);
     connect(m_undo, &QAbstractButton::clicked, this, &Ribbon::undoClicked);
     connect(m_redo, &QAbstractButton::clicked, this, &Ribbon::redoClicked);
+    connect(m_file, &QAbstractButton::clicked, this, &Ribbon::fileClicked);
+    connect(m_insert, &QAbstractButton::clicked, this, &Ribbon::insertClicked);
+    connect(m_edit, &QAbstractButton::clicked, this, &Ribbon::editClicked);
     connect(m_prev, &QAbstractButton::clicked, this, &Ribbon::previousPageClicked);
     connect(m_next, &QAbstractButton::clicked, this, &Ribbon::nextPageClicked);
     connect(m_page, &QAbstractButton::clicked, this, &Ribbon::pageIndicatorClicked);
     connect(m_newPage, &QAbstractButton::clicked, this, &Ribbon::newPageClicked);
+    connect(m_pageMenu, &QAbstractButton::clicked, this, &Ribbon::pageMenuClicked);
     connect(m_zoom, &QAbstractButton::clicked, this, &Ribbon::zoomClicked);
+    connect(m_zoomIn, &QAbstractButton::clicked, this, &Ribbon::zoomInClicked);
+    connect(m_zoomOut, &QAbstractButton::clicked, this, &Ribbon::zoomOutClicked);
+    connect(m_fit, &QAbstractButton::clicked, this, &Ribbon::fitClicked);
     connect(m_fullScreen, &QAbstractButton::clicked, this, &Ribbon::fullScreenClicked);
+}
+
+void Ribbon::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    updateFit();
+}
+
+void Ribbon::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    updateFit();
+}
+
+void Ribbon::updateFit()
+{
+    if (m_fitting || !layout())
+        return;
+    m_fitting = true;
+    for (const auto& group : m_optional)
+        for (QWidget* w : group)
+            w->setVisible(true);
+    auto required = [this]() {
+        const QMargins m = layout()->contentsMargins();
+        int total = m.left() + m.right();
+        int count = 0;
+        for (int i = 0; i < layout()->count(); ++i) {
+            QWidget* w = layout()->itemAt(i)->widget();
+            if (!w || w->isHidden())
+                continue;
+            total += std::max(w->sizeHint().width(), w->minimumWidth());
+            ++count;
+        }
+        return total + std::max(0, count - 1) * layout()->spacing();
+    };
+    for (const auto& group : m_optional) {
+        if (required() <= width())
+            break;
+        for (QWidget* w : group)
+            w->setVisible(false);
+    }
+    m_fitting = false;
 }
 
 TouchButton* Ribbon::addButton(const QString& icon, const QString& text)

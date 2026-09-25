@@ -49,6 +49,11 @@ public:
 
     void activateTool(ToolId id);
     void applyUiScale(qreal scale);
+    /// Opens the exact-values panel (measurements, lines, vectors, shapes) or the editor of an object.
+    void editObject(const ObjectId& id);
+    /// ✨ Magic Equation Maker for the selected handwriting.
+    void openMagicEquation();
+    SelectionBar& selectionBar() { return *m_selectionBar; }
     static qreal automaticUiScale(const QWidget* window);
 
 protected:
@@ -63,7 +68,6 @@ private:
     void updateRibbonState();
     void updateToolChip();
     void onCoreToolClicked(ToolId id, const QString& popoverKey);
-    void editObject(const ObjectId& id);
     void toggleFullScreen();
     void addPage();
 

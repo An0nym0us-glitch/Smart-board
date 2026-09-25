@@ -13,8 +13,13 @@
 namespace cb {
 
 namespace {
-constexpr qint64 kYoungStrokeMs = 280;     // a stroke this young is cancelled by a second finger
-constexpr qreal kYoungStrokeMm = 7.0;      // ... or one that moved less than this
+// A second finger turns a stroke into pan/zoom only while the stroke is "young": it has barely
+// moved (a finger resting before a pinch), or it started a moment ago and is still short (two
+// fingers of a pinch landing a few frames apart). A line that is really being drawn is never
+// interrupted.
+constexpr qreal kYoungStrokeMm = 7.0;      // moved less than this: always young
+constexpr qint64 kYoungStrokeMs = 120;     // started less than this ago ...
+constexpr qreal kYoungStrokeMaxMm = 20.0;  // ... and moved less than this: young
 constexpr qint64 kPalmWindowMs = 450;      // fingers of a palm gesture must land within this window
 constexpr qreal kPalmContactMm = 24.0;     // contact diameter considered a palm/fist
 constexpr qreal kHandSpanMm = 190.0;       // maximum distance of fingers from the centroid
@@ -95,6 +100,24 @@ void InputManager::cancelAll()
     m_primaryId = -1;
 }
 
+bool InputManager::stylusActive() const
+{
+    return m_stylusDown || (m_lastStylusTime >= 0 && m_clock.elapsed() - m_lastStylusTime < kStylusProximityMs);
+}
+
+InputManager::TouchState InputManager::touchState() const
+{
+    switch (m_mode) {
+    case TouchMode::None: return TouchState::Idle;
+    case TouchMode::Pointer: return TouchState::Drawing;
+    case TouchMode::MultiDraw: return TouchState::MultiDrawing;
+    case TouchMode::PanZoom: return TouchState::PanZoom;
+    case TouchMode::PalmErase: return TouchState::PalmErase;
+    case TouchMode::WaitRelease: return TouchState::Ignoring;
+    }
+    return TouchState::Idle;
+}
+
 // ------------------------------------------------------------------------------------------ mouse
 
 bool InputManager::handleMouse(QMouseEvent* e)
@@ -161,10 +184,33 @@ bool InputManager::handleTablet(QTabletEvent* e)
     pe.hasPressure = true;
     pe.modifiers = e->modifiers();
     pe.timestamp = e->timestamp();
+    m_lastStylusTime = m_clock.elapsed();
 
     switch (e->type()) {
     case QEvent::TabletPress:
         if (!m_stylusDown) {
+            // Pen priority: a hand that touched the board just before the pen must not leave ink or
+            // keep zooming. Young finger strokes are cancelled; the fingers are ignored until lifted.
+            if (m_mode == TouchMode::Pointer || m_mode == TouchMode::MultiDraw) {
+                for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it) {
+                    if (it->forwarded) {
+                        forwardTouch(it.key(), PointerPhase::Cancel, *it, Qt::NoModifier);
+                        it->forwarded = false;
+                    }
+                }
+                m_primaryId = -1;
+                m_mode = TouchMode::WaitRelease;
+            } else if (m_mode == TouchMode::PanZoom) {
+                GestureEvent g;
+                g.type = GestureType::PanZoom;
+                g.phase = GesturePhase::End;
+                g.centroid = m_prevCentroid;
+                m_sink.gestureEvent(g);
+                m_mode = TouchMode::WaitRelease;
+            } else if (m_mode == TouchMode::PalmErase) {
+                updatePalm(GesturePhase::End);
+                m_mode = TouchMode::WaitRelease;
+            }
             m_stylusDown = true;
             m_stylusDevice = pe.device;
             pe.phase = PointerPhase::Down;
@@ -376,7 +422,10 @@ bool InputManager::handleTouch(QTouchEvent* e)
         switch (m_mode) {
         case TouchMode::None:
             m_firstTouchTime = now;
-            if (m_palmEnabled && isPalmContact(t)) {
+            if (stylusActive()) {
+                // The pen is writing or hovering: this is the writing hand resting on the board.
+                m_mode = TouchMode::WaitRelease;
+            } else if (m_palmEnabled && isPalmContact(t)) {
                 beginPalm(mods);
             } else if (m_multiUser) {
                 m_mode = TouchMode::MultiDraw;
@@ -391,8 +440,9 @@ bool InputManager::handleTouch(QTouchEvent* e)
             break;
         case TouchMode::Pointer: {
             const Track primary = m_tracks.value(m_primaryId);
-            const bool young = (now - primary.startTime) < kYoungStrokeMs
-                || geom::distance(primary.start, primary.pos) < kYoungStrokeMm * m_pixelsPerMm;
+            const qreal moved = geom::distance(primary.start, primary.pos);
+            const bool young = moved < kYoungStrokeMm * m_pixelsPerMm
+                || ((now - primary.startTime) < kYoungStrokeMs && moved < kYoungStrokeMaxMm * m_pixelsPerMm);
             if (young) {
                 forwardTouch(m_primaryId, PointerPhase::Cancel, primary, mods);
                 m_tracks[m_primaryId].forwarded = false;

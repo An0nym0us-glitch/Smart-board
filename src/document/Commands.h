@@ -3,6 +3,7 @@
 #include "document/Command.h"
 #include "document/DocumentObject.h"
 #include "document/Page.h"
+#include "math/MeasureScale.h"
 
 #include <vector>
 
@@ -193,6 +194,38 @@ private:
     PageId m_page;
     QString m_name;
     TemplateSpec m_background;
+    QString m_text;
+};
+
+/// Changes the logical size of a page (content keeps its document coordinates).
+class SetPageSizeCommand final : public Command
+{
+public:
+    SetPageSizeCommand(const PageId& page, const QSizeF& size, QString text);
+    void redo(Document& doc) override { apply(doc); }
+    void undo(Document& doc) override { apply(doc); }
+    QString text() const override { return m_text; }
+    PageId pageId() const override { return m_page; }
+
+private:
+    void apply(Document& doc);
+    PageId m_page;
+    QSizeF m_size;
+    QString m_text;
+};
+
+/// Changes the lesson's drawing scale (e.g. 10 cm = 1 km).
+class SetScaleCommand final : public Command
+{
+public:
+    SetScaleCommand(const MeasureScale& scale, QString text);
+    void redo(Document& doc) override { apply(doc); }
+    void undo(Document& doc) override { apply(doc); }
+    QString text() const override { return m_text; }
+
+private:
+    void apply(Document& doc);
+    MeasureScale m_scale;
     QString m_text;
 };
 

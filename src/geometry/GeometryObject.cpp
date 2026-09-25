@@ -100,8 +100,7 @@ QString GeometryObject::format(ConstructKind kind, const QVector<QPointF>& pts, 
     case ConstructKind::Segment: {
         if (pts.size() < 2)
             return QString();
-        const QString unit = cs.unitLabel().isEmpty() ? QString() : QLatin1Char(' ') + cs.unitLabel();
-        return prefix + geom::formatNumber(cs.mathDistance(pts[0], pts[1]), 2) + unit;
+        return prefix + cs.formatLength(cs.mathDistance(pts[0], pts[1]), 2);
     }
     case ConstructKind::Line:
     case ConstructKind::Ray: {
@@ -121,6 +120,11 @@ QString GeometryObject::format(ConstructKind kind, const QVector<QPointF>& pts, 
         if (pts.size() < 2)
             return QString();
         const QPointF d = cs.toMath(pts[1]) - cs.toMath(pts[0]);
+        if (cs.usesScale()) {
+            return prefix + QStringLiteral("⟨%1, %2⟩ %3  |v| = %4")
+                                .arg(geom::formatNumber(cs.toReal(d.x()), 2), geom::formatNumber(cs.toReal(d.y()), 2),
+                                     cs.realUnitLabel(), cs.formatLength(geom::length(d), 2));
+        }
         return prefix + QStringLiteral("⟨%1, %2⟩  |v| = %3")
                             .arg(geom::formatNumber(d.x(), 2), geom::formatNumber(d.y(), 2),
                                  geom::formatNumber(geom::length(d), 2));

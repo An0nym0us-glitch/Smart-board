@@ -78,6 +78,17 @@
     <file>icons/undo.svg</file>
     <file>icons/vector.svg</file>
     <file>icons/zoom-in.svg</file>
+    <file>icons/insert.svg</file>
+    <file>icons/page-clear.svg</file>
+    <file>icons/page-delete.svg</file>
+    <file>icons/fit-width.svg</file>
+    <file>icons/fit-page.svg</file>
+    <file>icons/page-size.svg</file>
+    <file>icons/scale.svg</file>
+    <file>icons/precision.svg</file>
+    <file>icons/cut.svg</file>
+    <file>icons/view.svg</file>
+    <file>icons/slope-edit.svg</file>
     <file>icons/zoom-out.svg</file>
     <file>themes/dark.json</file>
     <file>templates/builtin.json</file>

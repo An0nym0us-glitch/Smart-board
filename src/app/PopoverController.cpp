@@ -2,10 +2,14 @@
 
 #include "app/AppServices.h"
 #include "ui/Popover.h"
+#include "ui/popovers/BoardPanels.h"
 #include "ui/popovers/DrawingPanels.h"
 #include "ui/popovers/LessonPanels.h"
 #include "ui/popovers/MathPanels.h"
+#include "ui/popovers/MagicEquationPanel.h"
 #include "ui/popovers/PageNavigatorPanel.h"
+#include "ui/popovers/PropertiesPanel.h"
+#include "document/Document.h"
 
 namespace cb {
 
@@ -69,8 +73,46 @@ Popover* PopoverController::create(const QString& key)
     } else if (key == QLatin1String("table")) {
         title = tr("Table");
         content = new TablePanel(s);
+    } else if (key == QLatin1String("insert")) {
+        title = tr("Insert");
+        content = new InsertPanel(s);
+        width = 420;
+    } else if (key == QLatin1String("edit")) {
+        title = tr("Edit");
+        content = new EditPanel(s);
+        width = 420;
+    } else if (key == QLatin1String("pageactions")) {
+        title = tr("Page");
+        content = new PageActionsPanel(s);
+        width = 500;
+    } else if (key == QLatin1String("pagesize")) {
+        title = tr("Page size");
+        content = new PageSetupPanel(s);
+        width = 520;
+    } else if (key == QLatin1String("background")) {
+        title = tr("Background");
+        content = new BackgroundPanel(s);
+        width = 460;
+    } else if (key == QLatin1String("view")) {
+        title = tr("View");
+        content = new ViewPanel(s);
+        width = 480;
+    } else if (key == QLatin1String("scale")) {
+        title = tr("Scale");
+        content = new ScalePanel(s);
+        width = 480;
+    } else if (key == QLatin1String("properties")) {
+        Page* page = s.doc.currentPage();
+        DocumentObject* o = page ? page->object(m_propertiesTarget) : nullptr;
+        title = o ? PropertiesPanel::titleFor(*o) : tr("Properties");
+        content = new PropertiesPanel(s, m_propertiesTarget);
+        width = 460;
+    } else if (key == QLatin1String("magic")) {
+        title = tr("✨ Magic Equation Maker");
+        content = new MagicEquationPanel(s, m_magicTargets);
+        width = 520;
     } else if (key == QLatin1String("lesson")) {
-        title = tr("Lesson");
+        title = tr("File");
         content = new LessonPanel(s);
         width = 420;
     } else if (key == QLatin1String("templates")) {
@@ -172,6 +214,20 @@ void PopoverController::editEquation(const ObjectId& id, const QRect& anchorRect
 {
     m_equationTarget = id;
     if (Popover* p = create(QStringLiteral("equation")))
+        m_host.openAt(p, anchorRect);
+}
+
+void PopoverController::editProperties(const ObjectId& id, const QRect& anchorRect)
+{
+    m_propertiesTarget = id;
+    if (Popover* p = create(QStringLiteral("properties")))
+        m_host.openAt(p, anchorRect);
+}
+
+void PopoverController::openMagicEquation(const QVector<ObjectId>& strokes, const QRect& anchorRect)
+{
+    m_magicTargets = strokes;
+    if (Popover* p = create(QStringLiteral("magic")))
         m_host.openAt(p, anchorRect);
 }
 

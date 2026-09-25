@@ -36,6 +36,9 @@ public:
 ///  * >= 4 fingers placed together within a short window, or a very large contact
 ///                        -> palm erase gesture (one grouped action, not four pointers)
 ///  * multi-user mode     -> every finger is an independent pointer (several students drawing)
+///  * pen priority        -> while the stylus touches or hovers over the board (and briefly after),
+///                           new touches are ignored so a resting hand neither draws nor
+///                           palm-erases; a young finger stroke is cancelled when the pen lands
 class InputManager
 {
 public:
@@ -53,6 +56,14 @@ public:
 
     /// Cancels every active pointer / gesture (e.g. when the page changes).
     void cancelAll();
+
+    /// True while the stylus touches the board or was seen within kStylusProximityMs.
+    bool stylusActive() const;
+    /// Touch input state, for diagnostics and tests.
+    enum class TouchState { Idle, Drawing, MultiDrawing, PanZoom, PalmErase, Ignoring };
+    TouchState touchState() const;
+
+    static constexpr qint64 kStylusProximityMs = 400;
 
     static constexpr int kMousePointerId = 0;
     static constexpr int kStylusPointerId = 1;
@@ -101,6 +112,7 @@ private:
     // Stylus
     bool m_stylusDown = false;
     PointerDevice m_stylusDevice = PointerDevice::Stylus;
+    qint64 m_lastStylusTime = -1;
 
     // Touch
     QElapsedTimer m_clock;

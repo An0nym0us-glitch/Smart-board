@@ -1,5 +1,6 @@
 #include "storage/ProjectSerializer.h"
 
+#include "core/JsonUtil.h"
 #include "storage/Container.h"
 
 #include <QCoreApplication>
@@ -46,6 +47,7 @@ QJsonObject ProjectSerializer::documentToJson(const DocumentContents& c)
 
     root.insert(QStringLiteral("coordinates"), c.coordinates.toJson());
     root.insert(QStringLiteral("defaultTemplate"), c.defaultTemplate.toJson());
+    root.insert(QStringLiteral("defaultPageSize"), json::fromSize(c.defaultPageSize));
     root.insert(QStringLiteral("currentPage"), c.currentPage);
 
     QJsonArray pages;
@@ -65,6 +67,9 @@ bool ProjectSerializer::documentFromJson(const QJsonObject& root, DocumentConten
     if (root.contains(QStringLiteral("coordinates")))
         out->coordinates = CoordinateSystem::fromJson(root.value(QStringLiteral("coordinates")).toObject());
     out->defaultTemplate = TemplateSpec::fromJson(root.value(QStringLiteral("defaultTemplate")).toObject());
+    const QSizeF pageSize = json::toSize(root.value(QStringLiteral("defaultPageSize")), QSizeF(Page::kDefaultWidth, Page::kDefaultHeight));
+    if (pageSize.width() >= 100 && pageSize.height() >= 100)
+        out->defaultPageSize = pageSize;
     out->currentPage = root.value(QStringLiteral("currentPage")).toInt(0);
     out->pages.clear();
     int skipped = 0;

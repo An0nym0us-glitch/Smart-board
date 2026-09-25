@@ -254,4 +254,40 @@ void ModifyPageCommand::apply(Document& doc)
 void ModifyPageCommand::redo(Document& doc) { apply(doc); }
 void ModifyPageCommand::undo(Document& doc) { apply(doc); }
 
+// ---------------------------------------------------------------- SetPageSizeCommand
+
+SetPageSizeCommand::SetPageSizeCommand(const PageId& page, const QSizeF& size, QString text)
+    : m_page(page)
+    , m_size(size)
+    , m_text(std::move(text))
+{
+}
+
+void SetPageSizeCommand::apply(Document& doc)
+{
+    Page* p = doc.pageById(m_page);
+    if (!p)
+        return;
+    const QSizeF old = p->size();
+    p->setSize(m_size);
+    p->touch();
+    m_size = old;
+    doc.notifyPageChanged(m_page);
+}
+
+// ------------------------------------------------------------------- SetScaleCommand
+
+SetScaleCommand::SetScaleCommand(const MeasureScale& scale, QString text)
+    : m_scale(scale)
+    , m_text(std::move(text))
+{
+}
+
+void SetScaleCommand::apply(Document& doc)
+{
+    const MeasureScale old = doc.coordinates().scale();
+    doc.setScale(m_scale);
+    m_scale = old;
+}
+
 } // namespace cb

@@ -1,5 +1,6 @@
 #include "app/MainWindow.h"
 
+#include "ai/MathInkRecognizer.h"
 #include "ai/Recognition.h"
 #include "app/AppServices.h"
 #include "app/AppSettings.h"
@@ -11,12 +12,14 @@
 #include "canvas/ThumbnailCache.h"
 #include "document/Commands.h"
 #include "document/Document.h"
+#include "document/PageOperations.h"
 #include "document/TemplateLibrary.h"
 #include "geometry/InstrumentLayer.h"
 #include "geometry/Instruments.h"
 #include "graph/TableObject.h"
 #include "tools/EditOperations.h"
 #include "tools/EraserTool.h"
+#include "tools/MagicEquation.h"
 #include "tools/SelectionModel.h"
 #include "tools/TextTool.h"
 #include "tools/ToolController.h"
@@ -26,6 +29,7 @@
 #include "ui/SelectionBar.h"
 #include "ui/TableCellEditor.h"
 #include "ui/Toast.h"
+#include "ui/popovers/PropertiesPanel.h"
 #include "ui/UiContext.h"
 #include "ui/widgets/TouchButton.h"
 
@@ -76,6 +80,8 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
     m_settings.loadTools(*m_tools);
     m_templates->load();
     m_recognizers->loadPlugins(QCoreApplication::applicationDirPath() + QStringLiteral("/plugins/recognizers"));
+    // Built-in offline recogniser for the Magic Equation Maker (plug-in models take precedence).
+    m_recognizers->registerEquationRecognizer(std::make_unique<MathInkRecognizer>());
 
     const TemplateSpec defaultTemplate = m_templates->find(m_settings.defaultTemplateId());
     m_doc->resetToNew(defaultTemplate);
@@ -129,6 +135,7 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
         if (ids.size() == 1)
             editObject(ids.first());
     });
+    connect(m_selectionBar, &SelectionBar::magicRequested, this, &MainWindow::openMagicEquation);
 
     buildRibbon();
     createShortcuts();
@@ -243,7 +250,15 @@ void MainWindow::buildRibbon()
     connect(m_ribbon, &Ribbon::nextPageClicked, this, [this]() { m_doc->setCurrentPageIndex(m_doc->currentPageIndex() + 1); });
     connect(m_ribbon, &Ribbon::pageIndicatorClicked, this, [this]() { m_popovers->toggle(QStringLiteral("pages"), m_ribbon->pageButton()); });
     connect(m_ribbon, &Ribbon::newPageClicked, this, &MainWindow::addPage);
-    connect(m_ribbon, &Ribbon::zoomClicked, this, [this]() { m_canvas->fitPage(); });
+    connect(m_ribbon, &Ribbon::fileClicked, this, [this]() { m_popovers->toggle(QStringLiteral("lesson"), m_ribbon->fileButton()); });
+    connect(m_ribbon, &Ribbon::insertClicked, this, [this]() { m_popovers->toggle(QStringLiteral("insert"), m_ribbon->insertButton()); });
+    connect(m_ribbon, &Ribbon::editClicked, this, [this]() { m_popovers->toggle(QStringLiteral("edit"), m_ribbon->editButton()); });
+    connect(m_ribbon, &Ribbon::pageMenuClicked, this,
+            [this]() { m_popovers->toggle(QStringLiteral("pageactions"), m_ribbon->pageMenuButton()); });
+    connect(m_ribbon, &Ribbon::zoomClicked, this, [this]() { m_popovers->toggle(QStringLiteral("view"), m_ribbon->zoomButton()); });
+    connect(m_ribbon, &Ribbon::zoomInClicked, this, [this]() { m_canvas->zoomStep(1); });
+    connect(m_ribbon, &Ribbon::zoomOutClicked, this, [this]() { m_canvas->zoomStep(-1); });
+    connect(m_ribbon, &Ribbon::fitClicked, this, [this]() { m_canvas->fitPage(); });
     connect(m_ribbon, &Ribbon::fullScreenClicked, this, &MainWindow::toggleFullScreen);
 
     m_ribbon->setPenColor(m_tools->penColor());
@@ -339,7 +354,7 @@ void MainWindow::updateTitle()
 
 void MainWindow::addPage()
 {
-    m_doc->commands().push(std::make_unique<InsertPageCommand>(m_doc->currentPageIndex() + 1, m_doc->createPage()));
+    pageops::newPage(*m_doc, m_doc->currentPageIndex());
 }
 
 void MainWindow::toggleFullScreen()
@@ -372,6 +387,7 @@ void MainWindow::applyUiScale(qreal scale)
         if (ids.size() == 1)
             editObject(ids.first());
     });
+    connect(m_selectionBar, &SelectionBar::magicRequested, this, &MainWindow::openMagicEquation);
     connect(m_doc.get(), &Document::contentChanged, m_selectionBar, &SelectionBar::refresh);
     connect(&m_canvas->selectionModel(), &SelectionModel::changed, m_selectionBar, &SelectionBar::refresh);
     connect(m_canvas, &CanvasWidget::viewChanged, m_selectionBar, &SelectionBar::refresh);
@@ -417,8 +433,27 @@ void MainWindow::editObject(const ObjectId& id)
         break;
     }
     default:
+        if (PropertiesPanel::supports(*o)) {
+            const QRect r = m_canvas->pageRectToWidget(o->sceneBounds());
+            m_popovers->editProperties(id, QRect(m_canvas->mapTo(m_boardArea, r.topLeft()), r.size()));
+        }
         break;
     }
+}
+
+void MainWindow::openMagicEquation()
+{
+    Page* page = m_doc->currentPage();
+    const QVector<ObjectId> ids = m_canvas->selectionModel().ids();
+    if (!page || !magic::isHandwriting(*page, ids)) {
+        m_toast->showMessage(tr("Select your handwriting with SELECT, then tap ✨ Magic Equation Maker."), 3500);
+        return;
+    }
+    QRectF bounds;
+    for (const ObjectId& id : ids)
+        bounds = bounds.isNull() ? page->object(id)->sceneBounds() : bounds.united(page->object(id)->sceneBounds());
+    const QRect r = m_canvas->pageRectToWidget(bounds);
+    m_popovers->openMagicEquation(ids, QRect(m_canvas->mapTo(m_boardArea, r.topLeft()), r.size()));
 }
 
 // ----------------------------------------------------------------------------------- shortcuts
@@ -498,14 +533,26 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             const QPointF pagePos = m_canvas->view().viewToPage(e->posF());
             QStringList images;
             QString lesson;
+            QString pdf;
+            QString presentation;
             for (const QUrl& url : e->mimeData()->urls()) {
                 const QString path = url.toLocalFile();
-                if (path.endsWith(QStringLiteral(".classboard"), Qt::CaseInsensitive))
+                const QString suffix = QFileInfo(path).suffix().toLower();
+                if (suffix == QLatin1String("classboard"))
                     lesson = path;
+                else if (suffix == QLatin1String("pdf"))
+                    pdf = path;
+                else if (suffix == QLatin1String("pptx") || suffix == QLatin1String("ppt") || suffix == QLatin1String("ppsx")
+                         || suffix == QLatin1String("pps") || suffix == QLatin1String("odp"))
+                    presentation = path;
                 else if (isImageFile(path))
                     images << path;
             }
-            if (!images.isEmpty())
+            if (!pdf.isEmpty())
+                m_lesson->importPdfFile(pdf);
+            else if (!presentation.isEmpty())
+                m_lesson->importPresentationFile(presentation);
+            else if (!images.isEmpty())
                 m_lesson->insertImageFiles(images, pagePos);
             else if (!lesson.isEmpty())
                 m_lesson->confirmDiscard([this, lesson]() { m_lesson->openFile(lesson); });
