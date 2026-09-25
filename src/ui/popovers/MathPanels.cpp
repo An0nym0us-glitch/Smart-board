@@ -111,6 +111,17 @@ GeometryPanel::GeometryPanel(const AppServices& s, Mode mode, QWidget* parent)
           measure(MeasureKind::Area, tr("Tap the corners, then tap the first corner again.")),
           measuring && mk == MeasureKind::Area}},
         this));
+    {
+        // Drawing scale and exact values: shared by measurements, vectors and shapes.
+        const MeasureScale scale = s.doc.coordinates().scale();
+        auto* scaleButton = panel::pill(ui, QStringLiteral("scale"),
+                                        scale.isIdentity() ? tr("Scale: none") : tr("Scale: %1").arg(scale.text()), this,
+                                        [sp]() { sp->popovers.push(QStringLiteral("scale")); });
+        layout->addWidget(panel::row(ui, {scaleButton}, this));
+        layout->addWidget(panel::hint(ui, tr("Exact values: select a measurement, line, vector or shape and tap the "
+                                             "precision button (or double-tap it)."),
+                                      this));
+    }
 
     if (mode == Mode::Full) {
         layout->addWidget(panel::section(ui, tr("Construct"), this));

@@ -18,12 +18,14 @@ rest open as popovers attached to the button that opened them, so you stay on th
 | **Shapes** | Line, arrow, double arrow, rectangle, rounded rectangle, circle, ellipse, triangle, right triangle, diamond, parallelogram, hexagon, regular polygon and free polygon. Fill is none, tint or solid. |
 | **Instruments** | Ruler (draw along its edges), protractor with measuring arms and an angle stamp, 45° and 30/60° set squares, and a compass that draws arcs and circles. |
 | **Geometry** | Distance, angle, slope and area measurements that update live. Points with coordinates, segments, lines, rays and vectors. Snapping to points and to the grid. |
-| **Equations** | LaTeX-style input with a symbol palette and a live preview. Supports fractions, roots, powers and indices, integrals, sums, limits, vectors, matrices, cases and Greek letters. Equations stay editable. |
+| **Precision** | Exact values next to dragging: line length, direction, angle, rise / run / slope, vector magnitude and direction, shape width / height with area and perimeter. A drawing scale such as 10 cm = 1 km shows real lengths, areas and vectors. |
+| **Equations** | LaTeX-style input with a symbol palette and a live preview. Supports fractions, roots, powers and indices, integrals, sums, limits, vectors, matrices, cases and Greek letters. Equations stay editable. The optional ✨ Magic Equation Maker turns selected handwriting into an equation after the teacher accepts a preview (offline). |
 | **Graphs** | Plot several functions with automatic parameter sliders (a, b, c …), zoom and pan, points that snap onto curves, vectors and value tables. |
-| **Pages** | Page navigator with thumbnails; drag to reorder, duplicate, delete, rename. Templates: blackboard, whiteboard, grid, dots, ruled, graph paper, music staves, coordinate plane, or your own image. |
+| **Pages** | Page menu with New, Duplicate, Clear and Delete page. Page navigator with thumbnails; drag to reorder, rename. Page sizes 16:9, 4:3, A4, A3 or custom; background colour per page. Templates: blackboard, whiteboard, grid, dots, ruled, graph paper, music staves, coordinate plane, or your own image. |
+| **View** | Zoom 25 %–250 % presets, zoom in / out, 100 %, fit page, fit width, full screen. Zoom never changes sizes, measurements or exports. |
 | **Content** | Text boxes with basic formatting, images (drag and drop, paste, import), tables. |
 | **Files** | Versioned `.classboard` lesson format with atomic saves, autosave and crash recovery. |
-| **Export / import** | Vector PDF with real text, PowerPoint `.pptx` and PNG. Imports images, pages from other lessons and PDFs (PDF import needs Poppler's `pdftoppm` or a Qt PDF build). |
+| **Export / import** | Vector PDF with real text (each page at its own size), PowerPoint `.pptx` and PNG, always of the complete page. Imports images, pages from other lessons, PDFs (every page keeps its size and aspect ratio) and PowerPoint `.ppt` / `.pptx` (every slide becomes a page). See [import requirements](docs/BUILDING.md#import-requirements). |
 
 There is one undo/redo history for every tool, and undo jumps to the page it changes.
 

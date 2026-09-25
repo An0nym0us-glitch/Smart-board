@@ -34,15 +34,22 @@ version or a CRC mismatch, so a damaged file is reported instead of loading as g
   "formatVersion": 1,
   "application": "ClassBoard 1.0.0",
   "metadata": { "title": "", "author": "", "created": "ISO-8601", "modified": "ISO-8601" },
-  "coordinates": { "m": [m11, m12, m21, m22, dx, dy], "unit": "cm" },
+  "coordinates": { "m": [m11, m12, m21, m22, dx, dy], "unit": "cm",
+                   "scale": { "board": 10, "boardUnit": "cm", "real": 1, "realUnit": "km" } },
   "defaultTemplate": { ...template... },
+  "defaultPageSize": [1920, 1080],
   "currentPage": 0,
   "pages": [ { "id": "uuid", "name": "", "size": [1920, 1080], "template": { ... }, "objects": [ ... ] } ]
 }
 ```
 
-`coordinates` is the page → math transform: by default the origin is at the page centre, one
-unit is 40 px, and the y axis points up.
+`coordinates` is the page → math transform: by default the origin is at the centre of a 16:9
+page, one unit (1 cm) is 40 document units, and the y axis points up. On pages of another size
+the origin moves to that page's centre. The optional `scale` (drawing scale, e.g. 10 cm = 1 km;
+units mm, cm, m, km, in, ft, yd, mi) is omitted when it is 1 : 1; older files simply have none.
+
+Page `size` is logical, in document units (40 per cm): 1920 × 1080 is the 48 × 27 cm classroom
+board, 840 × 1188 is A4 portrait. It never depends on the screen.
 
 ### Templates
 

@@ -13,6 +13,7 @@
 #include <QScrollArea>
 #include <QScroller>
 #include <QScrollBar>
+#include <QTimer>
 #include <QVariantAnimation>
 #include <QVBoxLayout>
 
@@ -77,6 +78,27 @@ void Popover::setContent(QWidget* content)
     m_content = content;
     content->setAutoFillBackground(false);
     m_scroll->setWidget(content);
+    m_lastHint = content->sizeHint();
+    content->installEventFilter(this);
+}
+
+bool Popover::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_content && event->type() == QEvent::LayoutRequest && !m_resizePending) {
+        // Coalesce: re-place once the layout has settled, and only if the size really changed.
+        m_resizePending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_resizePending = false;
+            if (!m_content)
+                return;
+            const QSize hint = m_content->sizeHint();
+            if (hint != m_lastHint) {
+                m_lastHint = hint;
+                emit contentResized();
+            }
+        });
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void Popover::setBackVisible(bool visible)
@@ -285,6 +307,10 @@ void PopoverHost::show(Popover* popover, bool animate)
     popover->setParent(this);
     connect(popover, &Popover::closeRequested, this, &PopoverHost::closeAll, Qt::UniqueConnection);
     connect(popover, &Popover::backRequested, this, &PopoverHost::back, Qt::UniqueConnection);
+    connect(popover, &Popover::contentResized, this, [this, popover]() {
+        if (current() == popover)
+            reposition();
+    }, Qt::UniqueConnection);
     popover->place(anchorRect(), rect());
     popover->show();
     popover->raise();

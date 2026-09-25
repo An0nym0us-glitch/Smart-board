@@ -5,6 +5,12 @@ install(FILES
     "${PROJECT_SOURCE_DIR}/LICENSE"
     DESTINATION doc)
 
+# Optional: ship Poppler's command line tools (pdftoppm + DLLs) for offline PDF import.
+set(CLASSBOARD_POPPLER_DIR "" CACHE PATH "Folder containing pdftoppm and its libraries, installed as bin/poppler/bin")
+if(CLASSBOARD_POPPLER_DIR)
+    install(DIRECTORY "${CLASSBOARD_POPPLER_DIR}/" DESTINATION bin/poppler/bin)
+endif()
+
 set(CPACK_PACKAGE_NAME "ClassBoard")
 set(CPACK_PACKAGE_VENDOR "ClassBoard contributors")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")

@@ -4,7 +4,38 @@
 #include <QFontMetricsF>
 #include <QPainter>
 
+#include <cmath>
+
 namespace cb {
+
+namespace {
+QFont labelFont(qreal pixelSize)
+{
+    QFont f;
+    f.setPixelSize(static_cast<int>(pixelSize));
+    f.setBold(true);
+    return f;
+}
+} // namespace
+
+QSizeF valueLabelSize(const QString& text, qreal pixelSize)
+{
+    const QFontMetricsF fm(labelFont(pixelSize));
+    return QSizeF(fm.horizontalAdvance(text) + pixelSize * 0.8, fm.height() + pixelSize * 0.3);
+}
+
+QPointF labelBesideSegment(const QPointF& a, const QPointF& b, const QString& text, qreal gap, qreal pixelSize)
+{
+    const QPointF mid = (a + b) / 2.0;
+    const QPointF d = b - a;
+    const qreal len = std::hypot(d.x(), d.y());
+    QPointF n = len > 1e-9 ? QPointF(-d.y() / len, d.x() / len) : QPointF(0, -1);
+    if (n.y() > 0 || (std::abs(n.y()) < 1e-9 && n.x() > 0))
+        n = -n; // above, or to the left of vertical segments
+    const QSizeF size = valueLabelSize(text, pixelSize);
+    const qreal extent = std::abs(n.x()) * size.width() / 2 + std::abs(n.y()) * size.height() / 2;
+    return mid + n * (gap + extent);
+}
 
 void paintValueLabel(QPainter& p, const QPointF& anchor, const QString& text, const QColor& color,
                      qreal counterRotation, qreal pixelSize)

@@ -37,7 +37,8 @@ public:
     QString labelText(const CoordinateSystem& cs) const;
 
     QRectF localBounds() const override;
-    qreal outlineMargin() const override { return 70.0; }
+    /// Room for the value label beside the figure (lengths in real units can be long).
+    qreal outlineMargin() const override { return 200.0; }
     void paint(QPainter& painter, const RenderContext& ctx) const override;
     bool canResize() const override { return false; }
     bool canRotate() const override { return false; }

@@ -103,6 +103,19 @@ compass and the protractor's stamp button produce document objects.
   radicals, scripts, limits, stretchy delimiters, matrices, accents). It paints with
   QPainter text and paths, so formulas stay vector in PDF export.
 
+* **Scale and precision.** `MeasureScale` (in the lesson's `CoordinateSystem`) converts board
+  lengths to real units ("10 cm = 1 km"); graph axes are unitless and never scaled.
+  `geometry/Precision` holds the exact-value operations (length, direction, angle,
+  rise/run/slope, polar vectors, shape metrics) as pure functions on page points; the property
+  panel applies them as ordinary undoable commands. Everything works in document units, so
+  zoom, DPI and window size never change a value.
+* **Magic Equation Maker.** `ai/MathInkRecognizer` is a built-in offline recogniser: strokes
+  are grouped into symbols, fraction bars and equals signs are found geometrically, other
+  symbols are classified with a $P point-cloud matcher, and a layout step detects powers and
+  fractions. It rejects uncertain input. Recognition runs on a worker thread and only produces
+  a preview; `tools/MagicEquation::acceptEquation` replaces the strokes in one undoable step
+  after the teacher accepts. Plug-in recognisers (`EquationRecognizer`) take precedence.
+
 ## UI (`ui/`)
 
 * `Theme` is data driven (`resources/themes/dark.json`). Colours and metrics are named roles,
@@ -125,9 +138,16 @@ compass and the protractor's stamp button produce document objects.
   running session holds a lock file. On start-up, recovery copies whose lock is stale are
   offered for restore.
 * Exports run on worker threads from immutable `DocumentSnapshot`s, with progress shown in
-  the toast. PDF output is vector with real text. PPTX output is one high-resolution picture
-  per 16:9 slide; PowerPoint cannot represent ink or formulas natively, so this keeps them
-  looking exactly right.
+  the toast. They render the complete logical page from document coordinates (never the
+  view), so zoom and scrolling have no influence. PDF output is vector with real text and each
+  page has its own size (A4 stays A4). PPTX output is one high-resolution picture per slide;
+  the slide follows the first page's aspect ratio and other pages are fitted whole.
+  PowerPoint cannot represent ink or formulas natively, so this keeps them looking exactly
+  right.
+* Imports: `PdfImporter` renders PDF pages (Qt PDF or Poppler), `PresentationImporter`
+  converts .ppt/.pptx to PDF with PowerPoint or LibreOffice first. `insertImportedPages`
+  gives every page the source's exact aspect ratio (PDFs keep their physical size) with the
+  rendered page as an image filling it, as one undoable step.
 
 ## Memory and performance
 

@@ -155,10 +155,7 @@ void MeasurementObject::paintShape(QPainter& p, MeasureKind kind, const QVector<
         const QPointF n = geom::perpendicular(geom::normalized(b - a));
         p.drawLine(a - n * 12, a + n * 12);
         p.drawLine(b - n * 12, b + n * 12);
-        QPointF off = n * 30;
-        if (off.y() > 0)
-            off = -off;
-        paintValueLabel(p, geom::midpoint(a, b) + off, label, color, rotation);
+        paintValueLabel(p, labelBesideSegment(a, b, label, 16.0), label, color, rotation);
         break;
     }
     case MeasureKind::Angle: {

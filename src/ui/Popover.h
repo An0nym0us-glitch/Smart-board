@@ -45,10 +45,13 @@ public:
 signals:
     void backRequested();
     void closeRequested();
+    /// The content's size hint changed (widgets shown / hidden): the host re-places the popover.
+    void contentResized();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     QPainterPath bubblePath() const;
@@ -67,6 +70,8 @@ private:
     bool m_notchBelow = true;
     qreal m_notchX = 0.0;
     QPoint m_targetPos;
+    QSize m_lastHint;
+    bool m_resizePending = false;
 };
 
 /// Transparent overlay covering the canvas area that owns the open popovers, closes them when

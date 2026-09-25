@@ -4,15 +4,21 @@
 
 ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bottom holds:
 
-`MORE · PEN · ERASER · SELECT · (active tool) · UNDO · REDO · ‹ page › · + PAGE · zoom · full screen`
+`MORE · PEN · ERASER · SELECT · (active tool) · UNDO · REDO · FILE · INSERT · EDIT · ‹ page › · NEW PAGE · PAGE · − zoom + · fit · full screen`
 
 * Tap **PEN**, **ERASER** or **SELECT** to switch tools. Tap the active tool again to open its
   options. A small caret on the button shows that options are available.
 * **MORE** opens every other tool: shapes, geometry, equations, graphs, instruments, images,
   text, tables, templates, import/export and settings. When you pick one of these tools, it
   appears as an extra ribbon button. Tap that button to reopen the tool's options.
-* Tap the **page indicator** (`3 / 12`) to open the page navigator.
-* Tap the **zoom percentage** to fit the page to the screen again.
+* **FILE** (new, open, save, import, export), **INSERT** (image, shape, text, graph, equation,
+  table, PDF, PowerPoint) and **EDIT** (undo, redo, cut, copy, paste, duplicate, delete, select
+  all) group the most used commands. On a narrow screen these groups are hidden; everything
+  is still in MORE.
+* Tap the **page indicator** (`3 / 12`) to open the page navigator, **NEW PAGE** to add a blank
+  page, and **PAGE** for the page menu.
+* Tap the **zoom percentage** for the View menu; **−** and **+** step through the zoom presets
+  and the frame button fits the page.
 * Tap anywhere outside a popover to close it.
 
 ## Touch, pen and mouse
@@ -26,10 +32,13 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 
 * **Palm erase** works in every tool and counts as a single undo step. You can turn it off in
   Settings.
+* **Writing with a pen:** while the pen touches or hovers over the board, touches are ignored,
+  so the hand resting on the board neither draws nor erases.
 * **Several people drawing** (Settings): every finger draws its own line and two-finger zoom
   is disabled. Use this when two students write at the board together.
-* A second finger that touches while a line is still being started cancels that line and
-  starts zooming. Once a line is well under way, other touches don't interrupt it.
+* A second finger that touches while a line is only just being started (it has barely moved)
+  cancels that line and starts zooming. Once a line is really being drawn, other touches
+  don't interrupt it.
 
 ## Tools
 
@@ -39,7 +48,8 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 * **Eraser.** *Stroke* removes whole lines, *Object* removes anything you touch, and *Area*
   rubs out exactly the ink under the eraser. *Clear page* asks for confirmation first, and you
   can undo it.
-* **Select.** Tap an object, drag a rectangle, or draw a lasso. Drag to move. Corner handles
+* **Select.** Tap an object (inside an empty rectangle or circle works too), drag a rectangle,
+  or draw a lasso. Drag a selected object to move it. Corner handles
   resize and the round handle rotates (it snaps to 15°). Line and polygon points can be
   dragged individually. The floating bar offers edit, colour, front/back, duplicate, copy and
   delete. Double-tap text, formulas, graphs or tables to edit them.
@@ -70,6 +80,15 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
   to whole coordinates.
 * **Coordinates.** *Coordinate plane background* puts numbered axes on the page. The unit is
   1 cm = one grid square.
+* **Exact values.** Select a line, vector, measurement, point or shape and tap the precision
+  button in the floating bar (or double-tap it). Type or step exact values: length and
+  direction of lines, the angle of an angle measurement (0°, 30°, 45°, 60°, 90° … in one tap),
+  rise, run, slope and slope angle, a vector's magnitude and direction, a shape's width and
+  height (area and perimeter are shown). Dragging still works and the values follow.
+* **Scale.** In the property panel tap *Change scale* (or MORE → Measurements → Scale) and set
+  e.g. *10 cm = 1 km*. Lengths, areas, perimeters and vectors are then shown in real units
+  (a 7 cm line reads 0.7 km), and you can enter real values (1 km draws a 10 cm line). Graphs
+  keep their own axes.
 
 ## Equations
 
@@ -77,6 +96,15 @@ MORE → Equation. Type LaTeX-style input or tap the palette, and the preview up
 Examples: `\frac{a}{b}`, `x^{2}`, `x_{n}`, `\sqrt{x}`, `\sqrt[3]{x}`, `\int_{0}^{1} f(x)\,dx`,
 `\sum_{i=1}^{n} i`, `\lim_{x \to 0}`, `\vec{v}`, `\begin{pmatrix} a & b \\ c & d \end{pmatrix}`,
 and Greek letters such as `\alpha` or `\pi`. Double-tap a formula to edit it.
+
+**✨ Magic Equation Maker** (optional): write an expression with the pen, select the
+handwriting with SELECT and tap ✨ in the floating bar (or in the Equation panel). ClassBoard
+recognises it offline and shows a preview: **Accept** replaces the handwriting with an
+editable equation (one undo brings the handwriting back), **Edit** lets you correct the
+formula first, **Cancel** leaves everything as it was. If it cannot read the handwriting it
+says so and offers **Try again** (best guess), **Edit manually** (the Equation panel) or
+**Cancel**. It never changes handwriting on its own. The built-in recogniser reads digits,
+x, y, a, b, c, n, + − = ( ), powers such as x² and simple fractions.
 
 ## Graphs
 
@@ -91,9 +119,17 @@ MORE → Function / Graph → *Insert graph*.
 
 ## Pages
 
-* **+ PAGE** adds a page after the current one.
+* **NEW PAGE** adds a page after the current one.
+* **PAGE** menu: *New page*, *Duplicate page*, *Clear page* (removes everything on the page,
+  keeps the page — asks first, can be undone) and *Delete page* (removes the page itself; Undo
+  in the message brings it back). It also opens *Page size*, *Background* and *Templates*.
+* **Page size:** classroom board 16:9, 4:3, A4, A3 (landscape or portrait) or a custom size in
+  cm, for this page, all pages or new pages. Sizes are logical: 1 cm on the page is 1 cm in
+  measurements, on any screen.
+* **Background:** white, black, light grey, blackboard green, more colours or any custom colour
+  (#RRGGBB), for this page or all pages. Grid and line patterns are kept.
 * In the page navigator you can tap a thumbnail to open it, drag thumbnails to reorder them
-  (or use the ◀ ▶ buttons), and duplicate, delete, rename or change the background of a page.
+  (or use the ◀ ▶ buttons), and duplicate, clear, delete or rename a page.
 * **Templates** (MORE → Templates) apply to this page, all pages, or new pages. *Background
   from image* and *Save this background* create custom templates that every lesson can use.
 
@@ -104,10 +140,13 @@ MORE → Function / Graph → *Insert graph*.
 * **Autosave** keeps a recovery copy while there are unsaved changes. The interval is set in
   Settings. If ClassBoard or the computer stops unexpectedly, the next start offers to restore
   the lesson.
-* **Import.** Images (or drag them onto the board, or paste), pages from another lesson, and
-  PDF documents. Each PDF page becomes a board page you can write on.
+* **Import.** Images (or drag them onto the board, or paste), pages from another lesson, PDF
+  documents and PowerPoint presentations (.ppt, .pptx). Each PDF page or slide becomes a board
+  page of the same shape (PDF pages keep their size, e.g. A4) that you can write on. Drag a
+  PDF or presentation onto the board to import it.
 * **Export.** PDF (current page, whole lesson or a page range such as `1-3, 5`), PowerPoint
-  (one slide per page) and PNG of the current page.
+  (one slide per page) and PNG of the current page. Exports always contain the complete page,
+  whatever the zoom.
 
 ## Keyboard shortcuts
 
@@ -120,6 +159,7 @@ MORE → Function / Graph → *Insert graph*.
 | Arrow keys (Shift for bigger steps) | nudge selection |
 | Page Up / Page Down, Ctrl+M | previous / next page, new page |
 | Ctrl+0, Ctrl++ / Ctrl+− | fit page, zoom in / out |
+| Double-tap (SELECT) | edit text, formula, graph, table — or exact values of lines, measurements and shapes |
 | P, E, V, T | pen, eraser, select, text |
 | F11 | full screen |
 | Esc | close popover / clear selection / finish editing |

@@ -167,10 +167,7 @@ void GeometryObject::paintShape(QPainter& p, ConstructKind kind, const QVector<Q
         p.drawLine(a, b);
         dot(pts[0], 6.5);
         dot(pts[1], 6.5);
-        QPointF n = geom::perpendicular(geom::normalized(pts[1] - pts[0])) * 30.0;
-        if (n.y() > 0)
-            n = -n;
-        labelAnchor = geom::midpoint(pts[0], pts[1]) + n;
+        labelAnchor = labelBesideSegment(pts[0], pts[1], label, 12.0, 20.0);
         break;
     }
     case ConstructKind::Vector: {
@@ -178,10 +175,7 @@ void GeometryObject::paintShape(QPainter& p, ConstructKind kind, const QVector<Q
             break;
         ShapeObject::paintArrow(p, pts[0], pts[1], pen, false, true);
         dot(pts[0], 5.5);
-        QPointF n = geom::perpendicular(geom::normalized(pts[1] - pts[0])) * 32.0;
-        if (n.y() > 0)
-            n = -n;
-        labelAnchor = geom::midpoint(pts[0], pts[1]) + n;
+        labelAnchor = labelBesideSegment(pts[0], pts[1], label, 14.0, 20.0);
         break;
     }
     }

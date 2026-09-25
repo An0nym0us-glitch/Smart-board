@@ -28,16 +28,38 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # Poppler (pdftoppm) gives offline PDF import; it is shipped next to ClassBoard.exe.
+      - name: Download Poppler for Windows
+        shell: pwsh
+        run: |
+          $url = "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip"
+          Invoke-WebRequest -Uri $url -OutFile poppler.zip
+          Expand-Archive poppler.zip -DestinationPath poppler-extract
+          $exe = Get-ChildItem -Recurse -Filter pdftoppm.exe poppler-extract | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path poppler/bin | Out-Null
+          Copy-Item "$($exe.DirectoryName)\*" poppler/bin -Recurse
+          "$PWD\poppler\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      # LibreOffice lets the PowerPoint (.ppt / .pptx) import tests run on Windows too.
+      - name: Install LibreOffice (for presentation import tests)
+        shell: pwsh
+        continue-on-error: true
+        run: choco install libreoffice-fresh --no-progress -y
+
       - name: Test
         run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
         env:
           QT_QPA_PLATFORM: offscreen
           QT_FORCE_STDERR_LOGGING: 1
 
       - name: Package
+        shell: pwsh
         run: |
           cmake --install build --prefix "${{ github.workspace }}/ClassBoard"
           windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw "${{ github.workspace }}/ClassBoard/bin/ClassBoard.exe"
+          Copy-Item poppler "${{ github.workspace }}/ClassBoard/bin/poppler" -Recurse
 
       - name: Upload application
         uses: actions/upload-artifact@v4
@@ -52,7 +74,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y qtbase5-dev qtbase5-dev-tools libqt5svg5-dev poppler-utils ninja-build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev qtbase5-dev-tools libqt5svg5-dev poppler-utils ninja-build
+          sudo apt-get install -y --no-install-recommends libreoffice-impress
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release

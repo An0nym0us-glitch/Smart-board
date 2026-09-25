@@ -33,12 +33,25 @@ CPack always builds a portable ZIP. When NSIS is installed it also builds an ins
 registers the `.classboard` file type. The install step runs `windeployqt` on the installed
 executable.
 
-### Optional components
+### Import requirements
+
+Everything works offline; nothing is uploaded anywhere.
 
 * **PDF import.** If Qt was built with the Qt PDF module (`Qt5Pdf`), CMake finds it and
   ClassBoard renders PDFs itself. Otherwise ClassBoard uses Poppler's `pdftoppm`, found
-  either on `PATH` or in a `poppler\bin` folder next to `ClassBoard.exe`. Without either, the
-  PDF import button is disabled and explains why.
+  on `PATH` or in a `poppler\bin` (or `poppler\Library\bin`) folder next to
+  `ClassBoard.exe`. The Windows build produced by CI ships Poppler in `bin\poppler\bin`; for
+  your own installer configure with `-DCLASSBOARD_POPPLER_DIR=<folder with pdftoppm.exe>`.
+  Without a backend the PDF import buttons are disabled and explain why.
+* **PowerPoint import (.ppt, .pptx).** Slides are converted to PDF by an installed office
+  suite and then rendered like a PDF (so PDF import must be available too):
+  * Microsoft PowerPoint (Windows) through its automation interface, or
+  * LibreOffice (free, any platform) in headless mode — found on `PATH`, in
+    `C:\Program Files\LibreOffice\program`, or in a `libreoffice\program` folder next to
+    ClassBoard.
+  Without either, the import explains what to install.
+
+### Optional components
 * **Recogniser plug-ins.** Offline handwriting-to-formula recognisers are Qt plug-ins placed in
   `plugins\recognizers` next to the executable. See `src/ai/Recognition.h`.
 
@@ -46,6 +59,8 @@ executable.
 
 ```bash
 sudo apt install qtbase5-dev qtbase5-dev-tools libqt5svg5-dev cmake ninja-build
+# optional, for PDF / PowerPoint import and their tests:
+sudo apt install poppler-utils libreoffice-impress
 cmake -S . -B build -G Ninja
 cmake --build build
 ctest --test-dir build --output-on-failure
@@ -54,11 +69,12 @@ ctest --test-dir build --output-on-failure
 ## Continuous integration
 
 `.github/workflows/build.yml` builds and tests on Windows (MSVC, Qt 5.15.2) and Linux on every
-push. It also uploads a ready-to-run Windows folder as a build artifact.
+push, with Poppler and LibreOffice installed so the import tests run too. It uploads a
+ready-to-run Windows folder (including Poppler) as a build artifact.
 
 ## Diagnostics
 
 * `ClassBoard --screenshot out.png` renders the window after start-up and exits.
 * `ClassBoard --ui-scale 1.5` overrides the interface size.
-* Set `CLASSBOARD_SCREENSHOTS=<dir>` when running `tst_ui` / `tst_tools_ui` to get a
-  screenshot of every popover and tool.
+* Set `CLASSBOARD_SCREENSHOTS=<dir>` when running `tst_ui`, `tst_tools_ui` or `tst_board_ui`
+  to get a screenshot of every popover and tool.
