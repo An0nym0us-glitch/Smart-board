@@ -32,6 +32,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
         env:
           QT_QPA_PLATFORM: offscreen
+          QT_FORCE_STDERR_LOGGING: 1
 
       - name: Package
         run: |

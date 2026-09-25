@@ -3,8 +3,15 @@ function(classboard_test name)
     add_executable(${name} ${name}.cpp)
     target_link_libraries(${name} PRIVATE classboard_lib Qt5::Test)
     add_test(NAME ${name} COMMAND ${name})
-    # Widgets tests run without a display.
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Widgets tests run without a display. On Windows the offscreen platform uses a FreeType
+    # font database that only looks in <Qt>/lib/fonts (absent in normal Qt installs), so point
+    # it at the system fonts; otherwise text renders no glyphs.
+    set(env "QT_QPA_PLATFORM=offscreen")
+    if(WIN32 AND DEFINED ENV{WINDIR})
+        file(TO_CMAKE_PATH "$ENV{WINDIR}/Fonts" fontdir)
+        list(APPEND env "QT_QPA_FONTDIR=${fontdir}")
+    endif()
+    set_tests_properties(${name} PROPERTIES ENVIRONMENT "${env}")
 endfunction()
 
 classboard_test(tst_geometry)
