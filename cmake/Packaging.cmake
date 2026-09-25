@@ -1,0 +1,45 @@
+# Installation and packaging (CPack). On Windows this produces a ZIP and, when NSIS is
+# installed, an installer that also registers the .classboard file type.
+install(FILES
+    "${PROJECT_SOURCE_DIR}/README.md"
+    "${PROJECT_SOURCE_DIR}/LICENSE"
+    DESTINATION doc)
+
+set(CPACK_PACKAGE_NAME "ClassBoard")
+set(CPACK_PACKAGE_VENDOR "ClassBoard contributors")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "ClassBoard")
+set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_EXECUTABLES "ClassBoard" "ClassBoard")
+
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP;NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "ClassBoard ${PROJECT_VERSION}")
+    set(CPACK_NSIS_MUI_ICON "${PROJECT_SOURCE_DIR}/resources/app/classboard.ico")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\ClassBoard.exe")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+        WriteRegStr HKCR '.classboard' '' 'ClassBoard.Lesson'
+        WriteRegStr HKCR 'ClassBoard.Lesson' '' 'ClassBoard lesson'
+        WriteRegStr HKCR 'ClassBoard.Lesson\\\\DefaultIcon' '' '$INSTDIR\\\\bin\\\\ClassBoard.exe,0'
+        WriteRegStr HKCR 'ClassBoard.Lesson\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\ClassBoard.exe\\\" \\\"%1\\\"'
+    ")
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
+        DeleteRegKey HKCR '.classboard'
+        DeleteRegKey HKCR 'ClassBoard.Lesson'
+    ")
+    # Qt runtime: deploy with windeployqt into the install tree.
+    install(CODE "
+        get_filename_component(_qtbin \"${Qt5_DIR}/../../../bin\" ABSOLUTE)
+        find_program(_windeployqt windeployqt HINTS \"\${_qtbin}\")
+        if(_windeployqt)
+            execute_process(COMMAND \"\${_windeployqt}\" --no-translations --no-system-d3d-compiler --no-opengl-sw
+                                    \"\${CMAKE_INSTALL_PREFIX}/bin/ClassBoard.exe\")
+        endif()
+    ")
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
+
+include(CPack)
