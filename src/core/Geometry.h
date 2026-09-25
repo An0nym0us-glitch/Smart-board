@@ -4,6 +4,7 @@
 #include <QPointF>
 #include <QPolygonF>
 #include <QRectF>
+#include <QString>
 #include <QVector>
 
 #include <cmath>

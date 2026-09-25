@@ -5,6 +5,9 @@
 #include "export/Exporters.h"
 #include "export/ZipWriter.h"
 #include "app/ExportController.h"
+#include "storage/PdfImporter.h"
+
+#include <QSignalSpy>
 
 #include <QFile>
 #include <QTemporaryDir>
@@ -115,6 +118,35 @@ private slots:
         const QImage img(path);
         QCOMPARE(img.width(), 3840);
         QCOMPARE(img.height(), 2160);
+    }
+
+    void writeSamplesForExternalValidation()
+    {
+        // CI / developers can open these in PowerPoint, LibreOffice or a PDF viewer.
+        const QString dir = qEnvironmentVariable("CLASSBOARD_EXPORT_DIR");
+        if (dir.isEmpty())
+            QSKIP("Set CLASSBOARD_EXPORT_DIR to write sample exports");
+        QString error;
+        QVERIFY(PptxExporter::exportPages(*sample(), dir + QStringLiteral("/sample.pptx"), &error));
+        QVERIFY(PdfExporter::exportPages(*sample(), dir + QStringLiteral("/sample.pdf"), &error));
+    }
+
+    void pdfImportRoundTrip()
+    {
+        if (!PdfImporter::isAvailable())
+            QSKIP("No PDF backend (Qt PDF or Poppler's pdftoppm) on this machine");
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("roundtrip.pdf"));
+        QVERIFY(PdfExporter::exportPages(*sample(), path, nullptr));
+        PdfImporter importer;
+        QSignalSpy finished(&importer, &PdfImporter::finished);
+        importer.start(path, 50);
+        QVERIFY(finished.wait(20000));
+        const auto pages = finished.first().at(0).value<QVector<QImage>>();
+        QVERIFY2(finished.first().at(1).toString().isEmpty(), qPrintable(finished.first().at(1).toString()));
+        QCOMPARE(pages.size(), 2);
+        // 16:9 pages rendered at 50 dpi.
+        QVERIFY(qAbs(pages.first().width() / double(pages.first().height()) - 16.0 / 9.0) < 0.02);
     }
 
     void pageRanges()
