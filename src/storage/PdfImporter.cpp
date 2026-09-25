@@ -252,6 +252,17 @@ void PresentationImporter::start(const QString& path, int dpi)
     if (suffix != QLatin1String("ppt") && suffix != QLatin1String("pptx") && suffix != QLatin1String("pps")
         && suffix != QLatin1String("ppsx") && suffix != QLatin1String("odp"))
         return fail(tr("%1 is not a PowerPoint presentation.").arg(info.fileName()));
+    // Check the file really is a presentation before handing it to an office suite (which may
+    // otherwise "convert" any file, e.g. plain text, into a page).
+    {
+        QFile file(info.absoluteFilePath());
+        const QByteArray head = file.open(QIODevice::ReadOnly) ? file.read(8) : QByteArray();
+        const bool zip = head.startsWith("PK\x03\x04");                                   // .pptx .ppsx .odp
+        const bool ole = head == QByteArray::fromHex("d0cf11e0a1b11ae1");                   // .ppt .pps
+        const bool expectZip = suffix == QLatin1String("pptx") || suffix == QLatin1String("ppsx") || suffix == QLatin1String("odp");
+        if ((expectZip && !zip) || (!expectZip && !ole))
+            return fail(tr("%1 is damaged or not a real PowerPoint file.").arg(info.fileName()));
+    }
     if (!PdfImporter::isAvailable())
         return fail(PdfImporter::unavailableReason());
     const Converter converter = availableConverter();

@@ -409,6 +409,18 @@ private slots:
         f.close();
         importPresentation(txt, &error);
         QVERIFY(!error.isEmpty());
+        // Files with a presentation extension but other content are rejected before conversion
+        // (office suites would otherwise turn e.g. plain text into a page).
+        for (const char* name : {"fake.pptx", "fake.ppt"}) {
+            const QString fake = dir.filePath(QString::fromLatin1(name));
+            QFile g(fake);
+            QVERIFY(g.open(QIODevice::WriteOnly));
+            g.write("not a presentation");
+            g.close();
+            const QVector<ImportedPage> pages = importPresentation(fake, &error);
+            QVERIFY(pages.isEmpty());
+            QVERIFY2(error.contains(QStringLiteral("not a real PowerPoint file")), qPrintable(error));
+        }
         if (PresentationImporter::isAvailable()) {
             const QString fake = dir.filePath(QStringLiteral("fake.pptx"));
             QFile g(fake);
