@@ -258,6 +258,23 @@ private slots:
         const QImage a4 = ImageExporter::renderPage(*page, a4doc.images(), a4doc.coordinates(), 1188);
         QCOMPARE(a4.size(), QSize(840, 1188));
         QCOMPARE(a4.pixelColor(30, 1180).red(), 255);
+        // The page background colour is exported behind the content.
+        pageops::setBackgroundColor(a4doc, {0}, QColor(200, 220, 240));
+        const QImage coloured = ImageExporter::renderPage(*a4doc.page(0), a4doc.images(), a4doc.coordinates(), 1188);
+        QCOMPARE(coloured.pixelColor(400, 600), QColor(200, 220, 240));
+        QCOMPARE(coloured.pixelColor(30, 1180).red(), 255); // content stays on top
+        QTemporaryDir dir;
+        QVERIFY(PdfExporter::exportPages(*a4doc.snapshot(), dir.filePath(QStringLiteral("bg.pdf")), nullptr));
+        if (PdfImporter::isAvailable()) {
+            // Rendered back from the PDF: A4 page, coloured background.
+            const QVector<ImportedPage> pages = importPdf(dir.filePath(QStringLiteral("bg.pdf")));
+            QCOMPARE(pages.size(), 1);
+            const QImage rendered = QImage::fromData(pages.first().encoded);
+            const QColor centre = rendered.pixelColor(rendered.width() / 2, rendered.height() / 2);
+            QVERIFY2(std::abs(centre.red() - 200) < 4 && std::abs(centre.green() - 220) < 4 && std::abs(centre.blue() - 240) < 4,
+                     qPrintable(centre.name()));
+            QVERIFY(std::abs(pages.first().sizeMm.width() - 210) < 2 && std::abs(pages.first().sizeMm.height() - 297) < 2);
+        }
     }
 
     void pdfImportRoundTrip()
