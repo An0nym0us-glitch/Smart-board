@@ -51,6 +51,13 @@ Document ── pages: [Page]                 ── ImageStore (shared, dedupli
   once zooming settles.
 * Live content is drawn as an overlay on top of the cache: ink in progress, tool previews,
   selection handles and instruments.
+* `MagicHighlightLayer` is a temporary effect layer owned by the canvas (tools reach it via
+  `ToolHost::magicHighlights()`). `PenTool` hands finished Magic Highlighter strokes to it
+  instead of pushing an `AddObjectsCommand`, so they are never document objects: not
+  serialised, exported, counted or undoable. Each highlight stays for
+  `MAGIC_HIGHLIGHTER_DURATION_MS`, fades over `MAGIC_HIGHLIGHTER_FADE_MS` (both in
+  `MagicHighlightLayer.h`) and is dropped; its timer runs only while highlights exist. Page
+  changes and new lessons clear the layer.
 * Templates are procedural and cover an infinite canvas. Grids fade out when they would be
   too dense on screen. The nominal 16:9 page frame is only used for export and "fit".
 
@@ -72,10 +79,15 @@ QMouseEvent / QTabletEvent / QTouchEvent
   a line that is really being drawn is never interrupted.
 * **Pen priority.** While the stylus touches the board or hovers over it (and for 400 ms
   afterwards) new touches are ignored, so the writing hand neither draws nor palm-erases. A
-  young finger stroke is cancelled when the pen lands. Four or more fingers
-  landing close together within 450 ms, or one very large contact, start *palm erase*: one
-  grouped gesture that becomes one undo step. An optional multi-user mode lets every finger
-  draw on its own.
+  young finger stroke is cancelled when the pen lands.
+* **Wipe eraser.** Three fingers landing within 450 ms and packed tightly together (every
+  centre-to-centre distance and the group's bounding box within 40 mm), or one very large
+  contact, start the *wipe*: one grouped gesture driven only by the fingers of the group, that
+  never produces pointer events and becomes one undo step. All thresholds are in
+  `input/PalmGesture.h`. The eraser splits ink under the wipe and removes other objects it
+  hits (their own `hitTest`), except pictures and imported pages. An optional multi-user mode
+  lets every finger draw on its own; there a tight group of three still becomes a wipe (its
+  fingers' just-started strokes are cancelled) while the other fingers keep drawing.
 * Every pointer belongs to the tool that received its *down* event, so switching tools in the
   middle of a stroke is safe. The stylus eraser end is routed to the eraser automatically.
 

@@ -440,7 +440,7 @@ SettingsPanel::SettingsPanel(const AppServices& s, QWidget* parent)
     layout->addWidget(frame);
 
     layout->addWidget(panel::section(ui, tr("Touch and pen"), this));
-    auto* palm = new ToggleRow(ui, tr("Palm and four-finger erase"), this);
+    auto* palm = new ToggleRow(ui, tr("Palm and three-finger wipe"), this);
     palm->setChecked(settings->palmErase());
     connect(palm, &ToggleRow::toggled, this, [sp, settings](bool on) {
         settings->setPalmErase(on);

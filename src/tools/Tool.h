@@ -19,6 +19,7 @@ class SelectionModel;
 class ToolSettings;
 class Theme;
 class InstrumentLayer;
+class MagicHighlightLayer;
 
 enum class ToolId {
     Pen,
@@ -43,6 +44,8 @@ public:
     virtual ToolSettings& settings() = 0;
     virtual const Theme& theme() const = 0;
     virtual InstrumentLayer& instruments() = 0;
+    /// Temporary effect layer (Magic Highlighter): never part of the document or the undo stack.
+    virtual MagicHighlightLayer& magicHighlights() = 0;
     virtual QWidget* widget() = 0;
 
     /// Schedules a repaint of the overlay covering a page-space rect.

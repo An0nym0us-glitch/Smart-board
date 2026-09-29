@@ -12,8 +12,8 @@ rest open as popovers attached to the button that opened them, so you stay on th
 
 | Area | What you get |
 |---|---|
-| **Ink** | Smooth pen, highlighter, dashed and dotted ink. Stylus pressure. Several people can draw at the same time (optional). Optional shape recognition. |
-| **Eraser** | Stroke, object and area modes. The area eraser rubs out exactly the ink under it. Wipe with four fingers or the flat of your hand at any time. |
+| **Ink** | Smooth pen, highlighter, dashed and dotted ink. A Magic Highlighter for pointing things out: its marks fade away by themselves after about five seconds and are never saved. Stylus pressure. Several people can draw at the same time (optional). Optional shape recognition. |
+| **Eraser** | Stroke, object and area modes. The area eraser rubs out exactly the ink under it. Wipe with three fingers held together or the flat of your hand at any time; it erases ink and shapes, equations and other objects in one undo step. |
 | **Select** | Tap, rectangle or lasso selection, including multi-select. Move, resize, rotate and edit points. A floating action bar offers edit, colour, arrange, duplicate, copy and delete. |
 | **Shapes** | Line, arrow, double arrow, rectangle, rounded rectangle, circle, ellipse, triangle, right triangle, diamond, parallelogram, hexagon, regular polygon and free polygon. Fill is none, tint or solid. |
 | **Instruments** | Ruler (draw along its edges), protractor with measuring arms and an angle stamp, 45° and 30/60° set squares, and a compass that draws arcs and circles. |

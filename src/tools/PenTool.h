@@ -10,6 +10,10 @@ namespace cb {
 
 /// Freehand ink (pen, highlighter, dashed/dotted) with input smoothing, stylus pressure,
 /// drawing along instruments and several simultaneous pointers (multi-user touch).
+///
+/// In Magic Highlighter mode the same live stroke is drawn, but when it is finished it is handed
+/// to the canvas' temporary MagicHighlightLayer instead of being added to the document: no
+/// object, no undo step.
 class PenTool final : public Tool
 {
 public:
@@ -34,6 +38,7 @@ private:
         InkStyle ink;
         EdgeConstraint constraint;
         QPointF start;
+        bool magic = false; ///< Magic Highlighter stroke (temporary)
     };
 
     void addPoint(LiveStroke& s, const QPointF& raw, qreal pressure, bool force);

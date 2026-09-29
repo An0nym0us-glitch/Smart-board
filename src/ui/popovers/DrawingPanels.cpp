@@ -24,9 +24,32 @@
 #include <QGridLayout>
 #include <QPainter>
 
+#include <iterator>
+
 namespace cb {
 
 // ============================================================================================ Pen
+
+namespace {
+// Segments of the pen style control. The Magic Highlighter sits next to the highlighter; it is
+// a mode of the pen, not a stroke style that is ever stored.
+constexpr int kMagicSegment = 2;
+const StrokeStyle kStyleOfSegment[] = {StrokeStyle::Pen, StrokeStyle::Highlighter, StrokeStyle::Pen /* magic */,
+                                       StrokeStyle::Dashed, StrokeStyle::Dotted};
+
+int penSegment(const ToolSettings& t)
+{
+    if (t.magicHighlighter())
+        return kMagicSegment;
+    switch (t.penStyle()) {
+    case StrokeStyle::Pen: return 0;
+    case StrokeStyle::Highlighter: return 1;
+    case StrokeStyle::Dashed: return 3;
+    case StrokeStyle::Dotted: return 4;
+    }
+    return 0;
+}
+} // namespace
 
 PenPanel::PenPanel(const AppServices& s, QWidget* parent)
     : QWidget(parent)
@@ -38,14 +61,21 @@ PenPanel::PenPanel(const AppServices& s, QWidget* parent)
     layout->addWidget(panel::section(ui, tr("Style"), this));
     auto* style = new SegmentedControl(ui, {{QStringLiteral("pen"), tr("Pen")},
                                             {QStringLiteral("highlighter"), tr("Highlighter")},
+                                            {QStringLiteral("magic-highlighter"), tr("Magic Highlighter")},
                                             {QStringLiteral("line-dashed"), tr("Dashed")},
                                             {QStringLiteral("line-dotted"), tr("Dotted")}},
                                        this);
-    style->setCurrentIndex(static_cast<int>(tools.penStyle()));
+    style->setObjectName(QStringLiteral("penStyle"));
+    style->setCurrentIndex(penSegment(tools));
     layout->addWidget(style);
+    auto* magicHint = panel::hint(ui, tr("Magic Highlighter marks disappear by themselves after a few seconds. "
+                                         "They are not saved and do not change the lesson."),
+                                  this);
+    magicHint->setVisible(tools.magicHighlighter());
+    layout->addWidget(magicHint);
 
     auto* thickness = new TouchSlider(ui, tr("Thickness"), this);
-    thickness->setRange(1, tools.penStyle() == StrokeStyle::Highlighter ? 80 : 40);
+    thickness->setRange(1, tools.usesHighlighterWidth() ? 80 : 40);
     thickness->setStep(0.5);
     thickness->setValue(tools.penWidth());
     thickness->setFormatter([](double v) { return QString::number(v, 'f', v < 10 ? 1 : 0) + QStringLiteral(" px"); });
@@ -74,9 +104,15 @@ PenPanel::PenPanel(const AppServices& s, QWidget* parent)
     recognition->setChecked(tools.shapeRecognition());
     layout->addWidget(recognition);
 
-    connect(style, &SegmentedControl::currentChanged, this, [tp, thickness](int i) {
-        tp->setPenStyle(static_cast<StrokeStyle>(i));
-        thickness->setRange(1, tp->penStyle() == StrokeStyle::Highlighter ? 80 : 40);
+    connect(style, &SegmentedControl::currentChanged, this, [tp, thickness, magicHint](int i) {
+        if (i < 0 || i >= int(std::size(kStyleOfSegment)))
+            return;
+        if (i == kMagicSegment)
+            tp->setMagicHighlighter(true); // the pen style underneath is kept for later
+        else
+            tp->setPenStyle(kStyleOfSegment[i]); // also leaves the Magic Highlighter
+        magicHint->setVisible(tp->magicHighlighter());
+        thickness->setRange(1, tp->usesHighlighterWidth() ? 80 : 40);
         thickness->setValue(tp->penWidth());
     });
     connect(thickness, &TouchSlider::valueChanged, this, [tp](double v) { tp->setPenWidth(v); });
@@ -127,7 +163,7 @@ EraserPanel::EraserPanel(const AppServices& s, QWidget* parent)
         p.drawEllipse(box.center(), r, r);
     });
     layout->addWidget(size);
-    layout->addWidget(panel::hint(ui, tr("Tip: wipe with four fingers or the flat of your hand to erase anytime."), this));
+    layout->addWidget(panel::hint(ui, tr("Tip: wipe with three fingers held together or the flat of your hand to erase anytime."), this));
 
     const AppServices* sp = &s;
     // The one Clear Page flow (also in the Page menu).

@@ -28,10 +28,13 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 | Draw / use tool | one finger | pen tip | left button |
 | Pan | two fingers | – | right or middle drag, Shift + wheel |
 | Zoom | pinch | – | wheel |
-| Erase | four fingers or flat hand, wipe | pen eraser end | – |
+| Erase | three fingers held together or flat hand, wipe | pen eraser end | – |
 
-* **Palm erase** works in every tool and counts as a single undo step. You can turn it off in
-  Settings.
+* **Wipe (palm erase)**: put three fingers down side by side, touching or nearly touching, and
+  wipe like a board eraser. It works in every tool, erases ink, shapes, lines, arrows,
+  equations and other objects it passes over (pictures and imported slides stay), draws
+  nothing itself and counts as a single undo step. Fingers that are spread apart are never
+  a wipe. You can turn it off in Settings.
 * **Writing with a pen:** while the pen touches or hovers over the board, touches are ignored,
   so the hand resting on the board neither draws nor erases.
 * **Several people drawing** (Settings): every finger draws its own line and two-finger zoom
@@ -45,6 +48,11 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 * **Pen.** Styles: pen, highlighter, dashed and dotted. You can set thickness and colour,
   turn stylus pressure on or off, and enable *shape recognition*. With recognition on,
   roughly drawn lines, circles, rectangles and triangles become clean shapes.
+* **Magic Highlighter** (in the Pen menu, next to Highlighter). Draw to point something out
+  while you explain: the mark appears at once, stays for about five seconds, then fades
+  away by itself. Magic marks are not part of the lesson: they are not saved or exported and
+  Undo / Redo ignore them. It works with the pen, a finger and the mouse. Choosing another
+  pen style switches back to normal ink.
 * **Eraser.** *Stroke* removes whole lines, *Object* removes anything you touch, and *Area*
   rubs out exactly the ink under the eraser. *Clear page* asks for confirmation first, and you
   can undo it.

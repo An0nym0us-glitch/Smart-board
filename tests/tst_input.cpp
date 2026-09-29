@@ -1,10 +1,13 @@
 #include "core/Geometry.h"
 #include "input/InputManager.h"
+#include "input/PalmGesture.h"
 
 #include <QApplication>
 #include <QTabletEvent>
 #include <QTouchEvent>
 #include <QtTest>
+
+#include <cmath>
 
 using namespace cb;
 
@@ -169,23 +172,45 @@ private slots:
         QCOMPARE(r.count(PointerPhase::Up), 0);
     }
 
-    void fourFingersErase()
+    void threeTightFingersWipe()
     {
         Recorder r;
         InputManager input(r);
         TouchScript t(input);
         t.press(1, QPointF(100, 100));
-        t.press(2, QPointF(130, 95));
-        t.press(3, QPointF(160, 98));
-        t.press(4, QPointF(190, 110));
+        t.press(2, QPointF(160, 95));
+        t.press(3, QPointF(220, 98));
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 1);
         QCOMPARE(r.count(GestureType::PanZoom, GesturePhase::Cancel), 1);
-        t.move(1, QPointF(300, 300));
-        QVERIFY(r.count(GestureType::PalmErase, GesturePhase::Update) >= 1);
+        QCOMPARE(input.touchState(), InputManager::TouchState::PalmErase);
+        QCOMPARE(input.palmTouchIds().size(), PALM_ERASER_FINGER_COUNT);
+        for (int i = 1; i <= 5; ++i)
+            for (int id = 1; id <= 3; ++id)
+                t.move(id, QPointF(40 + id * 60 + i * 40, 100 + i * 30));
+        QVERIFY(r.count(GestureType::PalmErase, GesturePhase::Update) >= 5);
         QVERIFY(r.gestures.last().radius > 40);
-        for (int id = 1; id <= 4; ++id)
+        for (int id = 1; id <= 3; ++id)
             t.release(id);
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
+        QCOMPARE(r.count(PointerPhase::Up), 0); // the group never leaves ink
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
+    }
+
+    void groupMeasurement()
+    {
+        const qreal ppm = 4.0;
+        const qreal limit = PALM_ERASER_MAX_SPACING_MM * ppm;
+        PalmGroupShape s = measurePalmGroup({QPointF(0, 0), QPointF(30, 10), QPointF(60, -5)});
+        QCOMPARE(s.count, 3);
+        QCOMPARE(s.bounds, QRectF(QPointF(0, -5), QPointF(60, 10)));
+        QVERIFY(std::abs(s.maxSpacing - std::hypot(60.0, 5.0)) < 1e-9);
+        QVERIFY(isTightPalmGroup(s, ppm));
+        // Exactly at the limit is still a wipe, just beyond it is not.
+        QVERIFY(isTightPalmGroup(measurePalmGroup({QPointF(0, 0), QPointF(limit / 2, 0), QPointF(limit, 0)}), ppm));
+        QVERIFY(!isTightPalmGroup(measurePalmGroup({QPointF(0, 0), QPointF(limit / 2, 0), QPointF(limit + 2, 0)}), ppm));
+        // Wrong number of fingers is never a wipe.
+        QVERIFY(!isTightPalmGroup(measurePalmGroup({QPointF(0, 0), QPointF(10, 0)}), ppm));
+        QVERIFY(!isTightPalmGroup(measurePalmGroup({QPointF(0, 0), QPointF(10, 0), QPointF(20, 0), QPointF(30, 0)}), ppm));
     }
 
     void palmContactErases()
@@ -206,9 +231,10 @@ private slots:
         InputManager input(r);
         input.setPalmEraseEnabled(false);
         TouchScript t(input);
-        for (int id = 1; id <= 4; ++id)
+        for (int id = 1; id <= 3; ++id)
             t.press(id, QPointF(100 + id * 30, 100));
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 0);
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
     }
 
     void multiUserDrawing()
@@ -310,15 +336,16 @@ private slots:
         Recorder r;
         InputManager input(r);
         TouchScript t(input);
-        t.press(1, QPointF(300, 300));
+        // Three fingers spread apart (more than PALM_ERASER_MAX_SPACING_MM): a pan, not a wipe.
+        t.press(1, QPointF(200, 300));
         t.press(2, QPointF(400, 300));
-        t.press(3, QPointF(350, 400));
+        t.press(3, QPointF(300, 460));
         QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
         t.release(3);
         QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
         QCOMPARE(r.count(GestureType::PanZoom, GesturePhase::End), 0);
         // No jump: the remaining two fingers continue smoothly (rebaselined).
-        t.move(1, QPointF(305, 300));
+        t.move(1, QPointF(205, 300));
         QVERIFY(geom::length(r.gestures.last().panDelta) < 5.0);
         t.release(2);
         QCOMPARE(r.count(GestureType::PanZoom, GesturePhase::End), 1);
@@ -401,7 +428,7 @@ private slots:
             Recorder r;
             InputManager input(r);
             TouchScript t(input);
-            t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(130, 95)}, {3, QPointF(160, 98)}, {4, QPointF(190, 110)}});
+            t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(150, 95)}, {3, QPointF(200, 98)}});
             QCOMPARE(input.touchState(), InputManager::TouchState::PalmErase);
             t.cancel();
             QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1); // erased part stays one undo step
@@ -443,53 +470,75 @@ private slots:
         QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
     }
 
-    void fourFingersOnlyWhenPlacedTogether()
+    void threeFingersOnlyWhenPlacedTogether()
     {
-        // Two fingers zooming, then two more much later: stays a zoom (no accidental erase).
+        // Two fingers zooming, then a third close to them much later: stays a zoom.
         Recorder r;
         InputManager input(r);
         TouchScript t(input);
         t.press(1, QPointF(100, 100));
-        t.press(2, QPointF(200, 100));
-        QTest::qWait(500);
-        t.press(3, QPointF(150, 200));
-        t.press(4, QPointF(250, 200));
+        t.press(2, QPointF(150, 100));
+        QTest::qWait(int(PALM_ERASER_GROUP_WINDOW_MS) + 100);
+        t.press(3, QPointF(200, 100));
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 0);
         QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
     }
 
-    void fourFingersTooFarApartAreNotAHand()
+    void threeSeparatedFingersAreNotAWipe()
     {
-        Recorder r;
-        InputManager input(r);
-        input.setPixelsPerMm(4.0);
-        TouchScript t(input);
-        // Four fingers spread over more than a hand span (two students at once).
-        t.pressMany({{1, QPointF(0, 0)}, {2, QPointF(3000, 0)}, {3, QPointF(0, 2000)}, {4, QPointF(3000, 2000)}});
-        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 0);
+        const qreal ppm = 4.0;
+        const qreal limit = PALM_ERASER_MAX_SPACING_MM * ppm;
+        {
+            // Spread apart (a three-finger pan, or three students): never a wipe.
+            Recorder r;
+            InputManager input(r);
+            input.setPixelsPerMm(ppm);
+            TouchScript t(input);
+            t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(400, 100)}, {3, QPointF(250, 400)}});
+            QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 0);
+            QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        }
+        {
+            // Just beyond the spacing limit.
+            Recorder r;
+            InputManager input(r);
+            input.setPixelsPerMm(ppm);
+            TouchScript t(input);
+            t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(100 + limit / 2, 100)}, {3, QPointF(100 + limit + 4, 100)}});
+            QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 0);
+        }
+        {
+            // Just inside it.
+            Recorder r;
+            InputManager input(r);
+            input.setPixelsPerMm(ppm);
+            TouchScript t(input);
+            t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(100 + limit / 2, 100)}, {3, QPointF(100 + limit - 4, 100)}});
+            QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 1);
+        }
     }
 
-    void fourFingerEraseReliableWhenFingersArriveOneByOne()
+    void threeFingerWipeReliableWhenFingersArriveOneByOne()
     {
-        // Fingers of a hand rarely land in the same frame: 1, 2, 3, 4 within the window.
+        // Fingers of a hand rarely land in the same frame: 1, 2, 3 within the window.
         for (int run = 0; run < 20; ++run) {
             Recorder r;
             InputManager input(r);
             input.setPixelsPerMm(3.78);
             TouchScript t(input);
             const QPointF base(400 + run * 3, 300 + run * 2);
+            // Index, middle and ring finger held together: about 17 mm apart each.
             t.press(1, base);
-            t.press(2, base + QPointF(28, -8));
-            t.press(3, base + QPointF(55, -4));
-            t.press(4, base + QPointF(80, 12));
+            t.press(2, base + QPointF(65, -10));
+            t.press(3, base + QPointF(128, -4));
             QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 1);
             QCOMPARE(input.touchState(), InputManager::TouchState::PalmErase);
-            // The whole hand moves: the eraser follows the centroid, the radius covers the hand.
+            // The hand moves: the eraser follows the group's centre, the radius covers the fingers.
             for (int i = 1; i <= 5; ++i)
-                for (int id = 1; id <= 4; ++id)
-                    t.move(id, base + QPointF(id * 25 + i * 30, i * 20));
-            QVERIFY(r.gestures.last().radius >= 14 * 3.78);
-            for (int id = 1; id <= 4; ++id)
+                for (int id = 1; id <= 3; ++id)
+                    t.move(id, base + QPointF(id * 64 + i * 30, i * 20));
+            QVERIFY(r.gestures.last().radius >= PALM_ERASER_MIN_RADIUS_MM * 3.78);
+            for (int id = 1; id <= 3; ++id)
                 t.release(id);
             QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
             QCOMPARE(r.count(PointerPhase::Up), 0); // no ink from any finger
@@ -502,14 +551,121 @@ private slots:
         Recorder r;
         InputManager input(r);
         TouchScript t(input);
-        t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(130, 95)}, {3, QPointF(160, 98)}, {4, QPointF(190, 110)}});
+        t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(150, 95)}, {3, QPointF(200, 98)}});
         t.release(1);
         t.release(2);
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 0);
         t.move(3, QPointF(300, 300));
         QVERIFY(r.count(GestureType::PalmErase, GesturePhase::Update) >= 1);
+        QCOMPARE(r.gestures.last().centroid, QPointF(300, 300));
         t.release(3);
+        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
+    }
+
+    void extraFingerDuringWipeIsIgnored()
+    {
+        Recorder r;
+        InputManager input(r);
+        TouchScript t(input);
+        t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(150, 95)}, {3, QPointF(200, 98)}});
+        const QVector<int> group = input.palmTouchIds();
+        t.press(4, QPointF(500, 400)); // e.g. the thumb or the other hand
+        t.move(4, QPointF(600, 450));
+        QCOMPARE(input.palmTouchIds(), group);
+        QCOMPARE(r.count(PointerPhase::Down), 1); // only the very first finger, cancelled
+        QCOMPARE(r.count(PointerPhase::Cancel), 1);
+        const QPointF c = r.gestures.last().centroid;
+        QVERIFY(geom::distance(c, QPointF(150, 97.67)) < 1.0); // the thumb does not pull the wipe
+        for (int id = 1; id <= 3; ++id)
+            t.release(id);
+        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Ignoring); // until the thumb lifts
         t.release(4);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
+    }
+
+    void multiUserSeparatedFingersAllWrite()
+    {
+        Recorder r;
+        InputManager input(r);
+        input.setMultiUserTouch(true);
+        input.setPixelsPerMm(3.78);
+        TouchScript t(input);
+        // Three students, each with an own touch id and stroke.
+        t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(400, 120)}, {3, QPointF(700, 100)}});
+        for (int i = 1; i <= 4; ++i)
+            for (int id = 1; id <= 3; ++id)
+                t.move(id, QPointF(id * 300 - 200 + i * 10, 100 + i * 15));
+        for (int id = 1; id <= 3; ++id)
+            t.release(id);
+        QVERIFY(r.gestures.isEmpty());
+        QCOMPARE(r.count(PointerPhase::Down), 3);
+        QCOMPARE(r.count(PointerPhase::Up), 3);
+        QCOMPARE(r.count(PointerPhase::Cancel), 0);
+        QSet<int> ids;
+        for (const auto& p : r.pointers)
+            ids.insert(p.pointerId);
+        QCOMPARE(ids.size(), 3);
+    }
+
+    void multiUserTightGroupWipesWhileOthersWrite()
+    {
+        Recorder r;
+        InputManager input(r);
+        input.setMultiUserTouch(true);
+        input.setPixelsPerMm(3.78);
+        TouchScript t(input);
+        // A student writes on the right ...
+        t.press(10, QPointF(600, 300));
+        t.move(10, QPointF(650, 320));
+        QTest::qWait(int(PALM_ERASER_GROUP_WINDOW_MS) + 50);
+        // ... while the teacher wipes on the left with three fingers held together.
+        t.press(1, QPointF(100, 100));
+        t.press(2, QPointF(160, 95));
+        t.press(3, QPointF(220, 100));
+        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::Begin), 1);
+        QCOMPARE(input.palmTouchIds().size(), 3);
+        QVERIFY(!input.palmTouchIds().contains(10));
+        // The group's fingers that had started drawing are cancelled (no strokes).
+        QCOMPARE(r.count(PointerPhase::Cancel), 2);
+        for (int i = 1; i <= 3; ++i) {
+            for (int id = 1; id <= 3; ++id)
+                t.move(id, QPointF(40 + id * 60 + i * 30, 100 + i * 40));
+            t.move(10, QPointF(650 + i * 20, 320 + i * 10));
+        }
+        QVERIFY(r.count(GestureType::PalmErase, GesturePhase::Update) >= 3);
+        for (int id = 1; id <= 3; ++id)
+            t.release(id);
+        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
+        t.move(10, QPointF(720, 360));
+        t.release(10);
+        // The student's stroke was never interrupted.
+        int studentMoves = 0;
+        for (const auto& p : r.pointers) {
+            if (p.pointerId == InputManager::kTouchPointerBase + 10) {
+                QVERIFY(p.phase != PointerPhase::Cancel);
+                studentMoves += p.phase == PointerPhase::Move;
+            }
+        }
+        QCOMPARE(studentMoves, 5);
+        QCOMPARE(r.count(PointerPhase::Up), 1);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
+    }
+
+    void penLandingEndsTheWipe()
+    {
+        Recorder r;
+        InputManager input(r);
+        TouchScript t(input);
+        t.pressMany({{1, QPointF(100, 100)}, {2, QPointF(150, 95)}, {3, QPointF(200, 98)}});
+        QCOMPARE(input.touchState(), InputManager::TouchState::PalmErase);
+        tablet(input, QEvent::TabletPress, QPointF(500, 500));
+        QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Ignoring);
+        tablet(input, QEvent::TabletRelease, QPointF(520, 500), 0);
+        for (int id = 1; id <= 3; ++id)
+            t.release(id);
         QCOMPARE(r.count(GestureType::PalmErase, GesturePhase::End), 1);
     }
 

@@ -55,14 +55,41 @@ void EraserTool::takeOut(const ObjectId& id)
     m_session.removed.push_back(std::move(r));
 }
 
-void EraserTool::eraseAt(const QPointF& center, qreal radius)
+EraserTool::Method EraserTool::methodFor(EraserMode mode)
+{
+    switch (mode) {
+    case EraserMode::Stroke: return Method::Stroke;
+    case EraserMode::Object: return Method::Object;
+    case EraserMode::Area: return Method::Area;
+    }
+    return Method::Area;
+}
+
+bool EraserTool::cutStroke(const ObjectId& id, const QPointF& center, qreal radius)
+{
+    Page* page = host().page();
+    auto* stroke = static_cast<StrokeObject*>(page->object(id));
+    bool touched = false;
+    auto fragments = stroke->eraseCircle(center, radius, &touched);
+    if (!touched)
+        return false;
+    const int index = page->indexOf(id);
+    takeOut(id);
+    int insertAt = index;
+    for (auto& frag : fragments) {
+        m_session.created.insert(frag->id());
+        host().document().insertObject(m_session.page, insertAt++, std::move(frag));
+    }
+    return true;
+}
+
+void EraserTool::eraseAt(const QPointF& center, qreal radius, Method method)
 {
     if (!m_session.active)
         return;
     Page* page = host().page();
     if (!page || page->id() != m_session.page)
         return;
-    Document& doc = host().document();
     const QRectF area(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius);
     // Collect ids first: the page is modified while erasing.
     std::vector<ObjectId> candidates;
@@ -73,42 +100,36 @@ void EraserTool::eraseAt(const QPointF& center, qreal radius)
         DocumentObject* o = page->object(id);
         if (!o)
             continue;
-        switch (m_session.mode) {
-        case EraserMode::Area: {
-            if (o->type() != ObjectType::Stroke)
-                break;
-            bool touched = false;
-            auto fragments = static_cast<StrokeObject*>(o)->eraseCircle(center, radius, &touched);
-            if (!touched)
-                break;
-            const int index = page->indexOf(id);
-            takeOut(id);
-            int insertAt = index;
-            for (auto& frag : fragments) {
-                m_session.created.insert(frag->id());
-                doc.insertObject(m_session.page, insertAt++, std::move(frag));
-            }
+        switch (method) {
+        case Method::Area:
+            if (o->type() == ObjectType::Stroke)
+                cutStroke(id, center, radius);
             break;
-        }
-        case EraserMode::Stroke:
+        case Method::Stroke:
             if (o->type() == ObjectType::Stroke && o->hitTest(center, radius))
                 takeOut(id);
             break;
-        case EraserMode::Object:
+        case Method::Object:
             if (o->hitTest(center, radius))
+                takeOut(id);
+            break;
+        case Method::Wipe:
+            if (o->type() == ObjectType::Stroke)
+                cutStroke(id, center, radius);
+            else if (o->type() != ObjectType::Image && o->hitTest(center, radius))
                 takeOut(id);
             break;
         }
     }
 }
 
-void EraserTool::eraseAlong(const QPointF& from, const QPointF& to, qreal radius)
+void EraserTool::eraseAlong(const QPointF& from, const QPointF& to, qreal radius, Method method)
 {
     const qreal dist = geom::distance(from, to);
     const qreal step = std::max(radius * 0.5, host().viewToPageLength(1.0));
     const int n = std::max(1, static_cast<int>(std::ceil(dist / step)));
     for (int i = 1; i <= n; ++i)
-        eraseAt(geom::lerp(from, to, double(i) / n), radius);
+        eraseAt(geom::lerp(from, to, double(i) / n), radius, method);
 }
 
 void EraserTool::commit()
@@ -138,7 +159,7 @@ void EraserTool::pointerDown(const PointerEvent& e)
     m_pointers.insert(e.pointerId, e.pagePos);
     m_hoverView = e.viewPos;
     m_hoverVisible = true;
-    eraseAt(e.pagePos, pageRadius());
+    eraseAt(e.pagePos, pageRadius(), methodFor(m_session.mode));
     host().updateOverlayAll();
 }
 
@@ -147,7 +168,7 @@ void EraserTool::pointerMove(const PointerEvent& e)
     auto it = m_pointers.find(e.pointerId);
     if (it == m_pointers.end())
         return;
-    eraseAlong(*it, e.pagePos, pageRadius());
+    eraseAlong(*it, e.pagePos, pageRadius(), methodFor(m_session.mode));
     *it = e.pagePos;
     m_hoverView = e.viewPos;
     host().updateOverlayAll();
@@ -192,22 +213,22 @@ void EraserTool::pageChanged()
 
 void EraserTool::beginPalm(const QPointF& center, qreal radius)
 {
-    if (m_session.active && m_session.mode != EraserMode::Area) {
-        // Finish a pointer session in another mode first.
-        m_pointers.clear();
-        commit();
-    }
-    beginSession(EraserMode::Area);
+    if (m_palmActive)
+        return;
+    // Joins a running eraser session (pen erasing at the same time): one undo step for both.
+    beginSession(host().settings().eraserMode());
+    if (!m_session.active)
+        return;
     m_palmActive = true;
     m_palmCenter = center;
-    eraseAt(center, radius);
+    eraseAt(center, radius, Method::Wipe);
 }
 
 void EraserTool::movePalm(const QPointF& center, qreal radius)
 {
     if (!m_palmActive)
         return;
-    eraseAlong(m_palmCenter, center, radius);
+    eraseAlong(m_palmCenter, center, radius, Method::Wipe);
     m_palmCenter = center;
 }
 

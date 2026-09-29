@@ -1,6 +1,7 @@
 #include "input/InputManager.h"
 
 #include "core/Geometry.h"
+#include "input/PalmGesture.h"
 
 #include <QMouseEvent>
 #include <QTabletEvent>
@@ -9,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace cb {
 
@@ -20,10 +22,7 @@ namespace {
 constexpr qreal kYoungStrokeMm = 7.0;      // moved less than this: always young
 constexpr qint64 kYoungStrokeMs = 120;     // started less than this ago ...
 constexpr qreal kYoungStrokeMaxMm = 20.0;  // ... and moved less than this: young
-constexpr qint64 kPalmWindowMs = 450;      // fingers of a palm gesture must land within this window
-constexpr qreal kPalmContactMm = 24.0;     // contact diameter considered a palm/fist
-constexpr qreal kHandSpanMm = 190.0;       // maximum distance of fingers from the centroid
-constexpr qreal kMinPalmRadiusMm = 14.0;
+// The wipe eraser thresholds are in input/PalmGesture.h.
 } // namespace
 
 InputManager::InputManager(InputSink& sink)
@@ -89,12 +88,11 @@ void InputManager::cancelAll()
         m_sink.gestureEvent(g);
         break;
     }
-    case TouchMode::PalmErase:
-        updatePalm(GesturePhase::End);
-        break;
     default:
         break;
     }
+    // What was wiped so far stays (one undo step).
+    endPalm();
     m_tracks.clear();
     m_mode = TouchMode::None;
     m_primaryId = -1;
@@ -107,6 +105,8 @@ bool InputManager::stylusActive() const
 
 InputManager::TouchState InputManager::touchState() const
 {
+    if (palmActive())
+        return TouchState::PalmErase;
     switch (m_mode) {
     case TouchMode::None: return TouchState::Idle;
     case TouchMode::Pointer: return TouchState::Drawing;
@@ -198,6 +198,7 @@ bool InputManager::handleTablet(QTabletEvent* e)
                         it->forwarded = false;
                     }
                 }
+                endPalm(); // a wipe running beside multi-user drawing
                 m_primaryId = -1;
                 m_mode = TouchMode::WaitRelease;
             } else if (m_mode == TouchMode::PanZoom) {
@@ -208,7 +209,7 @@ bool InputManager::handleTablet(QTabletEvent* e)
                 m_sink.gestureEvent(g);
                 m_mode = TouchMode::WaitRelease;
             } else if (m_mode == TouchMode::PalmErase) {
-                updatePalm(GesturePhase::End);
+                endPalm();
                 m_mode = TouchMode::WaitRelease;
             }
             m_stylusDown = true;
@@ -303,26 +304,75 @@ qreal InputManager::angle(const QPointF& c) const
     return geom::angleDeg(m_tracks.value(ids[1]).pos - m_tracks.value(ids[0]).pos);
 }
 
+QPointF InputManager::palmCentroid() const
+{
+    QPointF c;
+    int n = 0;
+    for (int id : m_palmIds) {
+        auto it = m_tracks.constFind(id);
+        if (it == m_tracks.constEnd())
+            continue;
+        c += it->pos;
+        ++n;
+    }
+    return n > 0 ? c / n : m_prevCentroid;
+}
+
 qreal InputManager::palmRadius(const QPointF& c) const
 {
-    qreal r = kMinPalmRadiusMm * m_pixelsPerMm;
-    for (const Track& t : m_tracks)
-        r = std::max(r, geom::distance(t.pos, c) + t.diameter * 0.5 + 6.0 * m_pixelsPerMm);
+    qreal r = PALM_ERASER_MIN_RADIUS_MM * m_pixelsPerMm;
+    for (int id : m_palmIds) {
+        auto it = m_tracks.constFind(id);
+        if (it != m_tracks.constEnd())
+            r = std::max(r, geom::distance(it->pos, c) + it->diameter * 0.5 + PALM_ERASER_RADIUS_MARGIN_MM * m_pixelsPerMm);
+    }
     return r;
 }
 
 bool InputManager::isPalmContact(const Track& t) const
 {
-    return t.diameter >= kPalmContactMm * m_pixelsPerMm;
+    return t.diameter >= PALM_ERASER_PALM_CONTACT_MM * m_pixelsPerMm;
 }
 
-bool InputManager::looksLikeHand() const
+QVector<int> InputManager::findPalmGroup(int newId, qint64 now) const
 {
-    const QPointF c = centroid();
-    for (const Track& t : m_tracks)
-        if (geom::distance(t.pos, c) > kHandSpanMm * m_pixelsPerMm)
-            return false;
-    return true;
+    // The new finger plus the nearest fingers that landed with it (within the group window) and
+    // have not travelled yet. Only if those are packed tightly together is it a wipe; fingers
+    // spread apart stay writing / pinching.
+    if (!m_palmEnabled || palmActive() || PALM_ERASER_FINGER_COUNT < 2)
+        return {};
+    auto added = m_tracks.constFind(newId);
+    if (added == m_tracks.constEnd())
+        return {};
+    struct Candidate
+    {
+        int id;
+        qreal distance;
+    };
+    std::vector<Candidate> candidates;
+    for (auto it = m_tracks.constBegin(); it != m_tracks.constEnd(); ++it) {
+        if (it.key() == newId)
+            continue;
+        if (now - it->startTime > PALM_ERASER_GROUP_WINDOW_MS)
+            continue;
+        if (geom::distance(it->start, it->pos) > PALM_ERASER_MAX_TRAVEL_MM * m_pixelsPerMm)
+            continue;
+        candidates.push_back({it.key(), geom::distance(it->pos, added->pos)});
+    }
+    const int needed = PALM_ERASER_FINGER_COUNT - 1;
+    if (static_cast<int>(candidates.size()) < needed)
+        return {};
+    std::sort(candidates.begin(), candidates.end(),
+              [](const Candidate& a, const Candidate& b) { return a.distance < b.distance; });
+    QVector<int> ids{newId};
+    QVector<QPointF> positions{added->pos};
+    for (int i = 0; i < needed; ++i) {
+        ids << candidates[i].id;
+        positions << m_tracks.value(candidates[i].id).pos;
+    }
+    if (!isTightPalmGroup(measurePalmGroup(positions), m_pixelsPerMm))
+        return {};
+    return ids;
 }
 
 void InputManager::rebaseline()
@@ -363,10 +413,21 @@ void InputManager::updatePanZoom()
     m_sink.gestureEvent(g);
 }
 
-void InputManager::beginPalm(Qt::KeyboardModifiers mods)
+void InputManager::beginPalm(const QVector<int>& ids)
 {
-    Q_UNUSED(mods);
-    m_mode = TouchMode::PalmErase;
+    // Fingers of the group that were already drawing (multi-user mode) leave no ink.
+    for (int id : ids) {
+        auto it = m_tracks.find(id);
+        if (it != m_tracks.end() && it->forwarded) {
+            forwardTouch(id, PointerPhase::Cancel, *it, Qt::NoModifier);
+            it->forwarded = false;
+        }
+        if (id == m_primaryId)
+            m_primaryId = -1;
+    }
+    m_palmIds = ids;
+    // In multi-user mode the other fingers keep drawing next to the wipe.
+    m_mode = m_multiUser ? TouchMode::MultiDraw : TouchMode::PalmErase;
     updatePalm(GesturePhase::Begin);
 }
 
@@ -375,11 +436,19 @@ void InputManager::updatePalm(GesturePhase phase)
     GestureEvent g;
     g.type = GestureType::PalmErase;
     g.phase = phase;
-    g.centroid = m_tracks.isEmpty() ? m_prevCentroid : centroid();
+    g.centroid = palmCentroid();
     g.radius = palmRadius(g.centroid);
-    g.touchCount = m_tracks.size();
+    g.touchCount = m_palmIds.size();
     m_prevCentroid = g.centroid;
     m_sink.gestureEvent(g);
+}
+
+void InputManager::endPalm()
+{
+    if (!palmActive())
+        return;
+    updatePalm(GesturePhase::End);
+    m_palmIds.clear();
 }
 
 bool InputManager::handleTouch(QTouchEvent* e)
@@ -421,12 +490,11 @@ bool InputManager::handleTouch(QTouchEvent* e)
 
         switch (m_mode) {
         case TouchMode::None:
-            m_firstTouchTime = now;
             if (stylusActive()) {
                 // The pen is writing or hovering: this is the writing hand resting on the board.
                 m_mode = TouchMode::WaitRelease;
             } else if (m_palmEnabled && isPalmContact(t)) {
-                beginPalm(mods);
+                beginPalm({tp.id()});
             } else if (m_multiUser) {
                 m_mode = TouchMode::MultiDraw;
                 m_tracks[tp.id()].forwarded = true;
@@ -447,29 +515,43 @@ bool InputManager::handleTouch(QTouchEvent* e)
                 forwardTouch(m_primaryId, PointerPhase::Cancel, primary, mods);
                 m_tracks[m_primaryId].forwarded = false;
                 m_primaryId = -1;
-                if (m_palmEnabled && isPalmContact(t))
-                    beginPalm(mods);
+                const QVector<int> group = findPalmGroup(tp.id(), now);
+                if (!group.isEmpty())
+                    beginPalm(group);
+                else if (m_palmEnabled && isPalmContact(t))
+                    beginPalm({tp.id()});
                 else
                     beginPanZoom();
             }
             // Otherwise the extra finger is ignored so an ongoing stroke is not disturbed.
             break;
         }
-        case TouchMode::MultiDraw:
-            m_tracks[tp.id()].forwarded = true;
-            forwardTouch(tp.id(), PointerPhase::Down, t, mods);
+        case TouchMode::MultiDraw: {
+            // Every finger writes on its own, unless it completes a tight group (a wipe).
+            const QVector<int> group = findPalmGroup(tp.id(), now);
+            if (!group.isEmpty()) {
+                beginPalm(group);
+            } else if (m_palmEnabled && !palmActive() && isPalmContact(t)) {
+                beginPalm({tp.id()});
+            } else {
+                m_tracks[tp.id()].forwarded = true;
+                forwardTouch(tp.id(), PointerPhase::Down, t, mods);
+            }
             break;
-        case TouchMode::PanZoom:
-            if (m_palmEnabled && m_tracks.size() >= 4 && (now - m_firstTouchTime) < kPalmWindowMs && looksLikeHand()) {
+        }
+        case TouchMode::PanZoom: {
+            const QVector<int> group = findPalmGroup(tp.id(), now);
+            if (!group.isEmpty()) {
                 GestureEvent g;
                 g.type = GestureType::PanZoom;
                 g.phase = GesturePhase::Cancel;
                 m_sink.gestureEvent(g);
-                beginPalm(mods);
+                beginPalm(group);
             } else {
                 rebaseline();
             }
             break;
+        }
         case TouchMode::PalmErase:
         case TouchMode::WaitRelease:
             break;
@@ -483,21 +565,32 @@ bool InputManager::handleTouch(QTouchEvent* e)
             if (m_primaryId >= 0 && m_tracks.contains(m_primaryId))
                 forwardTouch(m_primaryId, PointerPhase::Move, m_tracks.value(m_primaryId), mods);
             break;
-        case TouchMode::MultiDraw:
+        case TouchMode::MultiDraw: {
+            bool palmMoved = false;
             for (const QTouchEvent::TouchPoint& tp : points) {
                 if (tp.state() != Qt::TouchPointMoved)
                     continue;
                 auto it = m_tracks.constFind(tp.id());
                 if (it != m_tracks.constEnd() && it->forwarded)
                     forwardTouch(tp.id(), PointerPhase::Move, *it, mods);
+                palmMoved = palmMoved || m_palmIds.contains(tp.id());
             }
+            if (palmMoved)
+                updatePalm(GesturePhase::Update);
             break;
+        }
         case TouchMode::PanZoom:
             updatePanZoom();
             break;
-        case TouchMode::PalmErase:
-            updatePalm(GesturePhase::Update);
+        case TouchMode::PalmErase: {
+            // Only the fingers of the group steer the wipe; other fingers are ignored.
+            bool palmMoved = false;
+            for (const QTouchEvent::TouchPoint& tp : points)
+                palmMoved = palmMoved || (tp.state() == Qt::TouchPointMoved && m_palmIds.contains(tp.id()));
+            if (palmMoved)
+                updatePalm(GesturePhase::Update);
             break;
+        }
         default:
             break;
         }
@@ -532,6 +625,8 @@ bool InputManager::handleTouch(QTouchEvent* e)
                 forwardTouch(tp.id(), PointerPhase::Up, released, mods);
             }
             m_tracks.remove(tp.id());
+            if (m_palmIds.removeAll(tp.id()) > 0 && m_palmIds.isEmpty())
+                updatePalm(GesturePhase::End); // the last finger of the group was lifted
             if (m_tracks.isEmpty())
                 m_mode = TouchMode::None;
             break;
@@ -549,11 +644,12 @@ bool InputManager::handleTouch(QTouchEvent* e)
             }
             break;
         case TouchMode::PalmErase:
+            // The wipe stays active until every finger of the group is lifted.
             m_tracks.remove(tp.id());
-            if (m_tracks.isEmpty()) {
-                updatePalm(GesturePhase::End);
-                m_mode = TouchMode::None;
-            }
+            if (m_palmIds.removeAll(tp.id()) > 0 && m_palmIds.isEmpty())
+                updatePalm(GesturePhase::End); // the last finger of the group was lifted
+            if (!palmActive())
+                m_mode = m_tracks.isEmpty() ? TouchMode::None : TouchMode::WaitRelease;
             break;
         case TouchMode::WaitRelease:
         case TouchMode::None:

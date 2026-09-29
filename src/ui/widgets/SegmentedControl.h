@@ -25,6 +25,9 @@ public:
     void setCurrentIndex(int index);
 
     QSize sizeHint() const override;
+    /// Area of one option. Options get widths in proportion to their labels, so a long label
+    /// (wrapped on two lines) does not squeeze its neighbours.
+    QRectF segmentRect(int i) const;
 
 signals:
     void currentChanged(int index);
@@ -34,7 +37,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
-    QRectF segmentRect(int i) const;
+    qreal naturalWidth(int i) const;
 
     const UiContext& m_ui;
     QVector<Option> m_options;

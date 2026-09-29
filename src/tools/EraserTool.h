@@ -11,10 +11,16 @@
 
 namespace cb {
 
-/// Stroke, object and area eraser, plus the grouped palm-erase gesture.
+/// Stroke, object and area eraser, plus the grouped palm / wipe eraser gesture.
 ///
-/// An erase "session" lasts while any eraser pointer (or the palm) is down; all changes of a
+/// An erase "session" lasts while any eraser pointer (or the wipe) is down; all changes of a
 /// session become a single undo step (ReplaceObjectsCommand).
+///
+/// The wipe erases like the board eraser of a real whiteboard: ink under it is cut away (area
+/// erase) and every other object it touches (shapes, lines, arrows, vectors, equations, text,
+/// graphs, constructions, measurements, tables) is removed using the objects' own hit tests.
+/// Pictures and imported PDF / PowerPoint pages are left alone so a wipe over annotations never
+/// removes the slide underneath.
 class EraserTool final : public Tool
 {
 public:
@@ -31,7 +37,7 @@ public:
     void pageChanged() override;
     QCursor cursor() const override { return QCursor(Qt::BlankCursor); }
 
-    // Palm gesture (page coordinates)
+    // Wipe gesture (page coordinates). Works whatever tool is active.
     void beginPalm(const QPointF& center, qreal radius);
     void movePalm(const QPointF& center, qreal radius);
     void endPalm();
@@ -48,9 +54,14 @@ private:
         int users = 0;
     };
 
+    /// How a single erase step treats the objects under it.
+    enum class Method { Stroke, Object, Area, Wipe };
+    static Method methodFor(EraserMode mode);
+
     void beginSession(EraserMode mode);
-    void eraseAt(const QPointF& center, qreal radius);
-    void eraseAlong(const QPointF& from, const QPointF& to, qreal radius);
+    void eraseAt(const QPointF& center, qreal radius, Method method);
+    void eraseAlong(const QPointF& from, const QPointF& to, qreal radius, Method method);
+    bool cutStroke(const ObjectId& id, const QPointF& center, qreal radius);
     void takeOut(const ObjectId& id);
     void commit();
     qreal pageRadius() const;

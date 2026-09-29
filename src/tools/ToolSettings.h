@@ -41,9 +41,14 @@ public:
     QColor penColor() const { return m_penColor; }
     void setPenColor(const QColor& c);
     StrokeStyle penStyle() const { return m_penStyle; }
+    /// Selecting a style also leaves the Magic Highlighter.
     void setPenStyle(StrokeStyle s);
-    /// Width used by the current style (highlighter keeps its own width).
-    qreal penWidth() const { return m_penStyle == StrokeStyle::Highlighter ? m_highlighterWidth : m_penWidth; }
+    /// Magic Highlighter: the pen draws temporary highlights that fade away by themselves and
+    /// never become part of the document. A session choice, deliberately not persisted.
+    bool magicHighlighter() const { return m_magicHighlighter; }
+    void setMagicHighlighter(bool on);
+    /// Width used by the current style (highlighter and Magic Highlighter share their own width).
+    qreal penWidth() const { return usesHighlighterWidth() ? m_highlighterWidth : m_penWidth; }
     void setPenWidth(qreal w);
     bool pressureEnabled() const { return m_pressure; }
     void setPressureEnabled(bool on);
@@ -52,6 +57,7 @@ public:
     bool shapeRecognition() const { return m_shapeRecognition; }
     void setShapeRecognition(bool on);
     InkStyle ink() const;
+    bool usesHighlighterWidth() const { return m_magicHighlighter || m_penStyle == StrokeStyle::Highlighter; }
 
     const QVector<QColor>& palette() const { return m_palette; }
     void setPalette(const QVector<QColor>& palette);
@@ -98,6 +104,7 @@ signals:
 private:
     QColor m_penColor = QColor(QStringLiteral("#f5f5f0"));
     StrokeStyle m_penStyle = StrokeStyle::Pen;
+    bool m_magicHighlighter = false;
     qreal m_penWidth = 4.0;
     qreal m_highlighterWidth = 22.0;
     bool m_pressure = true;

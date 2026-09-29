@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QPointF>
+#include <QVector>
 
 class QEvent;
 class QMouseEvent;
@@ -28,14 +29,16 @@ public:
 };
 
 /// Converts Qt mouse, tablet and touch events into device independent pointer events and
-/// recognises multi-touch gestures (pan/zoom and the grouped palm-erase gesture).
+/// recognises multi-touch gestures (pan/zoom and the grouped palm/wipe eraser).
 ///
 /// Touch handling state machine:
 ///  * one finger          -> pointer (draws with the active tool)
 ///  * second finger soon  -> the young stroke is cancelled and a pan/zoom gesture starts
-///  * >= 4 fingers placed together within a short window, or a very large contact
-///                        -> palm erase gesture (one grouped action, not four pointers)
-///  * multi-user mode     -> every finger is an independent pointer (several students drawing)
+///  * three fingers held tightly together (see PalmGesture.h), or one very large contact
+///                        -> wipe eraser: the group is one eraser, its fingers never draw
+///  * multi-user mode     -> every finger is an independent pointer (several students drawing);
+///                           a tight group of three still becomes a wipe while the other
+///                           fingers keep drawing
 ///  * pen priority        -> while the stylus touches or hovers over the board (and briefly after),
 ///                           new touches are ignored so a resting hand neither draws nor
 ///                           palm-erases; a young finger stroke is cancelled when the pen lands
@@ -60,8 +63,12 @@ public:
     /// True while the stylus touches the board or was seen within kStylusProximityMs.
     bool stylusActive() const;
     /// Touch input state, for diagnostics and tests.
+    /// PalmErase is reported while a wipe is in progress (in multi-user mode other fingers may
+    /// still be drawing at the same time).
     enum class TouchState { Idle, Drawing, MultiDrawing, PanZoom, PalmErase, Ignoring };
     TouchState touchState() const;
+    /// Touch ids of the fingers forming the active wipe (empty when there is none).
+    QVector<int> palmTouchIds() const { return m_palmIds; }
 
     static constexpr qint64 kStylusProximityMs = 400;
 
@@ -89,15 +96,18 @@ private:
     void forwardTouch(int id, PointerPhase phase, const Track& t, Qt::KeyboardModifiers mods);
     void beginPanZoom();
     void updatePanZoom();
-    void beginPalm(Qt::KeyboardModifiers mods);
+    QVector<int> findPalmGroup(int newId, qint64 now) const;
+    void beginPalm(const QVector<int>& ids);
     void updatePalm(GesturePhase phase);
+    void endPalm();
+    bool palmActive() const { return !m_palmIds.isEmpty(); }
+    QPointF palmCentroid() const;
     void rebaseline();
     QPointF centroid() const;
     qreal spread(const QPointF& c) const;
     qreal angle(const QPointF& c) const;
     qreal palmRadius(const QPointF& c) const;
     bool isPalmContact(const Track& t) const;
-    bool looksLikeHand() const;
 
     InputSink& m_sink;
     bool m_palmEnabled = true;
@@ -119,7 +129,7 @@ private:
     QHash<int, Track> m_tracks;
     TouchMode m_mode = TouchMode::None;
     int m_primaryId = -1;
-    qint64 m_firstTouchTime = 0;
+    QVector<int> m_palmIds; ///< fingers of the active wipe; they never produce pointer events
     QPointF m_prevCentroid;
     qreal m_prevSpread = 0.0;
     qreal m_prevAngle = 0.0;

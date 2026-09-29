@@ -26,16 +26,25 @@ void ToolSettings::setPenColor(const QColor& c)
 
 void ToolSettings::setPenStyle(StrokeStyle s)
 {
-    if (s == m_penStyle)
+    if (s == m_penStyle && !m_magicHighlighter)
         return;
     m_penStyle = s;
+    m_magicHighlighter = false;
+    emit changed();
+}
+
+void ToolSettings::setMagicHighlighter(bool on)
+{
+    if (on == m_magicHighlighter)
+        return;
+    m_magicHighlighter = on;
     emit changed();
 }
 
 void ToolSettings::setPenWidth(qreal w)
 {
     w = std::clamp(w, 1.0, 120.0);
-    qreal& target = m_penStyle == StrokeStyle::Highlighter ? m_highlighterWidth : m_penWidth;
+    qreal& target = usesHighlighterWidth() ? m_highlighterWidth : m_penWidth;
     if (qFuzzyCompare(target, w))
         return;
     target = w;
@@ -72,8 +81,8 @@ InkStyle ToolSettings::ink() const
     InkStyle ink;
     ink.color = m_penColor;
     ink.width = penWidth();
-    ink.style = m_penStyle;
-    ink.pressure = m_pressure && m_penStyle == StrokeStyle::Pen;
+    ink.style = m_magicHighlighter ? StrokeStyle::Highlighter : m_penStyle;
+    ink.pressure = m_pressure && ink.style == StrokeStyle::Pen;
     return ink;
 }
 

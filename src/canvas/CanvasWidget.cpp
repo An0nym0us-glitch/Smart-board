@@ -1,5 +1,6 @@
 #include "canvas/CanvasWidget.h"
 
+#include "canvas/MagicHighlightLayer.h"
 #include "canvas/PageRenderer.h"
 #include "core/Geometry.h"
 #include "document/Commands.h"
@@ -35,6 +36,7 @@ CanvasWidget::CanvasWidget(const UiContext& ui, Document& doc, ToolSettings& set
     , m_input(*this)
     , m_selection(std::make_unique<SelectionModel>())
     , m_instruments(std::make_unique<InstrumentLayer>())
+    , m_magic(std::make_unique<MagicHighlightLayer>())
     , m_tools(std::make_unique<ToolController>(*this))
 {
     setAttribute(Qt::WA_AcceptTouchEvents, true);
@@ -75,6 +77,10 @@ CanvasWidget::CanvasWidget(const UiContext& ui, Document& doc, ToolSettings& set
     m_instruments->setUnits(m_doc.coordinates().pxPerUnit(), m_doc.coordinates().unitLabel());
 
     connect(m_selection.get(), &SelectionModel::changed, this, [this]() { update(); });
+    connect(m_magic.get(), &MagicHighlightLayer::repaintRequested, this, [this](const PageId& pageId, const QRectF& r) {
+        if (page() && page()->id() == pageId)
+            updateOverlay(r);
+    });
     connect(&m_settings, &ToolSettings::changed, this, [this]() {
         if (Tool* t = m_tools->activeTool())
             setCursor(t->cursor());
@@ -354,6 +360,8 @@ void CanvasWidget::paintEvent(QPaintEvent* event)
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.save();
     painter.setTransform(m_view.toTransform());
+    if (p)
+        m_magic->paint(painter, p->id()); // temporary highlights: overlay only, never cached or saved
     m_tools->paintOverlay(painter);
     const CoordinateSystem pageCoordinates = m_doc.coordinatesFor(page());
     m_instruments->paint(painter, m_view.zoom(), &pageCoordinates);
@@ -446,6 +454,7 @@ void CanvasWidget::onCurrentPageChanged(int)
         return;
     m_input.cancelAll();
     m_tools->pageChanged();
+    m_magic->clear();
     m_selection->clear();
     m_hidden.clear();
     m_viewPage = p->id();
@@ -463,6 +472,7 @@ void CanvasWidget::onDocumentReset()
 {
     m_input.cancelAll();
     m_tools->pageChanged();
+    m_magic->clear();
     m_selection->clear();
     m_hidden.clear();
     m_pageViews.clear();

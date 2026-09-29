@@ -5,6 +5,9 @@
 #include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QtMath>
+
+#include <algorithm>
 
 namespace cb {
 
@@ -25,23 +28,48 @@ void SegmentedControl::setCurrentIndex(int index)
     update();
 }
 
+qreal SegmentedControl::naturalWidth(int i) const
+{
+    const Theme& t = m_ui.theme;
+    // Measured bold (the selected look) so the label never grows out of its segment.
+    const QFontMetricsF fm(t.font(t.metric(ThemeMetric::SmallFontSize), true));
+    const Option& o = m_options[i];
+    // Labels with an icon may wrap, so the longest word decides; text-only labels stay on one line.
+    qreal text = 0.0;
+    if (o.icon.isEmpty()) {
+        text = fm.horizontalAdvance(o.label);
+    } else {
+        for (const QString& word : o.label.split(QLatin1Char(' '), Qt::SkipEmptyParts))
+            text = std::max(text, fm.horizontalAdvance(word));
+    }
+    return std::max<qreal>(t.dpi(64), text + t.dpi(20));
+}
+
 QSize SegmentedControl::sizeHint() const
 {
     const Theme& t = m_ui.theme;
-    const QFontMetrics fm(t.font(t.metric(ThemeMetric::SmallFontSize)));
-    int w = 0;
+    qreal w = 0;
     bool anyIcon = false;
-    for (const Option& o : m_options) {
-        w += std::max(t.dpi(64), fm.horizontalAdvance(o.label) + t.dpi(20));
-        anyIcon = anyIcon || !o.icon.isEmpty();
+    for (int i = 0; i < m_options.size(); ++i) {
+        w += naturalWidth(i);
+        anyIcon = anyIcon || !m_options[i].icon.isEmpty();
     }
-    return QSize(w, anyIcon ? t.dpi(72) : t.dpi(48));
+    return QSize(qCeil(w), anyIcon ? t.dpi(72) : t.dpi(48));
 }
 
 QRectF SegmentedControl::segmentRect(int i) const
 {
-    const qreal w = qreal(width()) / std::max(1, m_options.size());
-    return QRectF(i * w, 0, w, height());
+    qreal total = 0.0, before = 0.0;
+    for (int k = 0; k < m_options.size(); ++k) {
+        const qreal w = naturalWidth(k);
+        total += w;
+        if (k < i)
+            before += w;
+    }
+    if (i < 0 || i >= m_options.size() || total <= 0.0)
+        return QRectF();
+    const qreal scale = width() / total;
+    return QRectF(before * scale, 0, naturalWidth(i) * scale, height());
 }
 
 void SegmentedControl::paintEvent(QPaintEvent*)
@@ -71,12 +99,16 @@ void SegmentedControl::paintEvent(QPaintEvent*)
             p.drawText(r, Qt::AlignCenter, o.label);
         } else {
             const qreal iconSize = t.scaled(ThemeMetric::IconSize);
-            const qreal textH = o.label.isEmpty() ? 0 : QFontMetricsF(f).height();
+            // A label that does not fit the segment ("Magic Highlighter") wraps onto two lines.
+            const QFontMetricsF fm(f);
+            const QRectF textBox(r.left() + t.dp(2), 0, r.width() - t.dp(4), r.height());
+            const int flags = Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap;
+            const qreal textH = o.label.isEmpty() ? 0 : fm.boundingRect(textBox, flags, o.label).height();
             const qreal total = iconSize + (textH > 0 ? t.dp(4) + textH : 0);
-            const qreal top = r.center().y() - total / 2;
+            const qreal top = std::max(r.top(), r.center().y() - total / 2);
             p.drawPixmap(QPointF(r.center().x() - iconSize / 2, top), m_ui.icons.pixmap(o.icon, iconSize, fg, dpr));
             if (textH > 0)
-                p.drawText(QRectF(r.left(), top + iconSize + t.dp(4), r.width(), textH), Qt::AlignCenter, o.label);
+                p.drawText(QRectF(textBox.left(), top + iconSize + t.dp(4), textBox.width(), textH), flags, o.label);
         }
     }
 }

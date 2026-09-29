@@ -9,6 +9,7 @@ add_library(classboard_lib STATIC
     app/MainWindow.cpp
     app/PopoverController.cpp
     canvas/CanvasWidget.cpp
+    canvas/MagicHighlightLayer.cpp
     canvas/PageRenderer.cpp
     canvas/ThumbnailCache.cpp
     canvas/ViewTransform.cpp
@@ -42,6 +43,7 @@ add_library(classboard_lib STATIC
     graph/GraphObject.cpp
     graph/TableObject.cpp
     input/InputManager.cpp
+    input/PalmGesture.cpp
     math/CoordinateSystem.cpp
     math/MeasureScale.cpp
     math/Expression.cpp

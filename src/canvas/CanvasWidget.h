@@ -21,6 +21,7 @@ class ToolController;
 class ToolSettings;
 class SelectionModel;
 class InstrumentLayer;
+class MagicHighlightLayer;
 class EraserTool;
 class Instrument;
 struct InstrumentResult;
@@ -66,6 +67,7 @@ public:
     ToolSettings& settings() override { return m_settings; }
     const Theme& theme() const override;
     InstrumentLayer& instruments() override { return *m_instruments; }
+    MagicHighlightLayer& magicHighlights() override { return *m_magic; }
     QWidget* widget() override { return this; }
     void updateOverlay(const QRectF& pageRect) override;
     void updateOverlayAll() override { update(); }
@@ -119,6 +121,7 @@ private:
     InputManager m_input;
     std::unique_ptr<SelectionModel> m_selection;
     std::unique_ptr<InstrumentLayer> m_instruments;
+    std::unique_ptr<MagicHighlightLayer> m_magic;
     std::unique_ptr<ToolController> m_tools;
     EraserTool* m_eraser = nullptr;
 

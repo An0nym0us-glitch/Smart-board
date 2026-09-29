@@ -12,6 +12,8 @@
 #include "geometry/InstrumentLayer.h"
 #include "geometry/Instruments.h"
 #include "geometry/MeasurementObject.h"
+#include "document/ImageObject.h"
+#include "math/equation/EquationObject.h"
 #include "graph/TableObject.h"
 #include "tools/EditOperations.h"
 #include "tools/SelectionModel.h"
@@ -43,6 +45,25 @@ private:
     Document& doc() { return m_window->document(); }
     Page& page() { return *doc().currentPage(); }
     QPoint toView(const QPointF& p) { return canvas().view().pageToView(p).toPoint(); }
+    QPointF toPage(const QPoint& p) { return canvas().view().viewToPage(QPointF(p)); }
+
+    /// Three fingers held together (about 16 mm apart) wiping straight down from y0 to y0 + 96.
+    void threeFingerWipe(int x0, int y0)
+    {
+        QTest::touchEvent(&canvas(), m_touch)
+            .press(0, QPoint(x0, y0 + 10), &canvas())
+            .press(1, QPoint(x0 + 30, y0), &canvas())
+            .press(2, QPoint(x0 + 60, y0 + 5), &canvas());
+        for (int i = 1; i <= 8; ++i)
+            QTest::touchEvent(&canvas(), m_touch)
+                .move(0, QPoint(x0, y0 + 10 + i * 12), &canvas())
+                .move(1, QPoint(x0 + 30, y0 + i * 12), &canvas())
+                .move(2, QPoint(x0 + 60, y0 + 5 + i * 12), &canvas());
+        QTest::touchEvent(&canvas(), m_touch)
+            .release(0, QPoint(x0, y0 + 106), &canvas())
+            .release(1, QPoint(x0 + 30, y0 + 96), &canvas())
+            .release(2, QPoint(x0 + 60, y0 + 101), &canvas());
+    }
 
     void mouseDrag(const QPoint& from, const QPoint& to, int steps = 12)
     {
@@ -133,24 +154,99 @@ private slots:
             mouseDrag(QPoint(300, y), QPoint(900, y));
         QCOMPARE(page().objectCount(), 4);
         const int commandsBefore = doc().commands().index();
-        // Four fingers land together and wipe across the middle of the lines.
-        QTest::touchEvent(&canvas(), m_touch).press(0, QPoint(560, 330), &canvas()).press(1, QPoint(590, 320), &canvas()).press(2, QPoint(620, 325), &canvas()).press(3, QPoint(650, 340), &canvas());
-        for (int i = 1; i <= 8; ++i)
-            QTest::touchEvent(&canvas(), m_touch)
-                .move(0, QPoint(560, 330 + i * 12), &canvas())
-                .move(1, QPoint(590, 320 + i * 12), &canvas())
-                .move(2, QPoint(620, 325 + i * 12), &canvas())
-                .move(3, QPoint(650, 340 + i * 12), &canvas());
-        QTest::touchEvent(&canvas(), m_touch)
-            .release(0, QPoint(560, 426), &canvas())
-            .release(1, QPoint(590, 416), &canvas())
-            .release(2, QPoint(620, 421), &canvas())
-            .release(3, QPoint(650, 436), &canvas());
-        // Every line was cut in two, and the whole wipe is one undo step.
+        // Three fingers land together and wipe across the middle of the lines.
+        threeFingerWipe(560, 320);
+        // Every line was cut in two, the fingers left no ink, and the whole wipe is one undo step.
         QCOMPARE(page().objectCount(), 8);
         QCOMPARE(doc().commands().index(), commandsBefore + 1);
         doc().commands().undo();
         QCOMPARE(page().objectCount(), 4);
+        doc().commands().redo();
+        QCOMPARE(page().objectCount(), 8);
+        doc().commands().undo();
+    }
+
+    void wipeErasesShapesAndEquations()
+    {
+        clearPage();
+        m_window->activateTool(ToolId::Select); // the wipe works whatever tool is active
+        const QPointF a = toPage(QPoint(590, 330));
+        const QPointF b = toPage(QPoint(590, 430));
+        const qreal mm = (b.y() - a.y()) / 100.0 * 4.0; // a few view pixels in page units
+        std::vector<ObjectPtr> objs;
+        std::vector<ObjectId> wiped;
+        auto add = [&](ObjectPtr o, bool expectWiped) {
+            if (expectWiped)
+                wiped.push_back(o->id());
+            objs.push_back(std::move(o));
+        };
+        ShapeStyle style;
+        // Outline shapes whose edges cross the wipe, a line, an arrow and an equation under it.
+        add(ShapeObject::createBox(ShapeKind::Rectangle, QRectF(QPointF(a.x(), a.y() + 5 * mm), QPointF(a.x() + 60 * mm, b.y())), style), true);
+        add(ShapeObject::createBox(ShapeKind::Circle, QRectF(QPointF(a.x() - 50 * mm, a.y() + 4 * mm), QSizeF(50 * mm, 50 * mm)), style), true);
+        add(ShapeObject::createBox(ShapeKind::Triangle, QRectF(QPointF(a.x() - 10 * mm, a.y() + 2 * mm), QSizeF(20 * mm, 15 * mm)), style), true);
+        add(ShapeObject::createLine(ShapeKind::Line, QPointF(a.x() - 40 * mm, (a.y() + b.y()) / 2), QPointF(a.x() + 40 * mm, (a.y() + b.y()) / 2), style), true);
+        add(ShapeObject::createLine(ShapeKind::Arrow, QPointF(a.x() - 40 * mm, b.y() - 6 * mm), QPointF(a.x() + 40 * mm, b.y() - 6 * mm), style), true);
+        add(EquationObject::create(QStringLiteral("x^2+1"), (a + b) / 2, 28.0, Qt::white), true);
+        // Far away: untouched. A picture / imported slide under the wipe: untouched.
+        add(ShapeObject::createBox(ShapeKind::Rectangle, QRectF(toPage(QPoint(100, 100)), QSizeF(20 * mm, 20 * mm)), style), false);
+        add(ImageObject::create(QStringLiteral("missing-image"), QSizeF(80 * mm, 80 * mm), (a + b) / 2), false);
+        const int total = static_cast<int>(objs.size());
+        doc().commands().push(std::make_unique<AddObjectsCommand>(page().id(), std::move(objs)));
+        QCOMPARE(page().objectCount(), total);
+
+        const int commandsBefore = doc().commands().index();
+        threeFingerWipe(560, 320);
+        for (const ObjectId& id : wiped)
+            QVERIFY2(!page().object(id), "an object under the wipe survived");
+        QCOMPARE(page().objectCount(), total - static_cast<int>(wiped.size()));
+        QCOMPARE(doc().commands().index(), commandsBefore + 1);
+        // Undo brings everything back, redo wipes again.
+        doc().commands().undo();
+        QCOMPARE(page().objectCount(), total);
+        for (const ObjectId& id : wiped)
+            QVERIFY(page().object(id));
+        doc().commands().redo();
+        QCOMPARE(page().objectCount(), total - static_cast<int>(wiped.size()));
+        doc().commands().undo();
+        m_window->activateTool(ToolId::Pen);
+    }
+
+    void separatedFingersWriteInMultiUserMode()
+    {
+        clearPage();
+        m_window->activateTool(ToolId::Pen);
+        canvas().input().setMultiUserTouch(true);
+        // Three students write at once: three independent strokes.
+        QTest::touchEvent(&canvas(), m_touch)
+            .press(0, QPoint(150, 250), &canvas())
+            .press(1, QPoint(400, 250), &canvas())
+            .press(2, QPoint(650, 250), &canvas());
+        for (int i = 1; i <= 8; ++i)
+            QTest::touchEvent(&canvas(), m_touch)
+                .move(0, QPoint(150 + i * 5, 250 + i * 12), &canvas())
+                .move(1, QPoint(400 - i * 5, 250 + i * 12), &canvas())
+                .move(2, QPoint(650 + i * 3, 250 + i * 12), &canvas());
+        QTest::touchEvent(&canvas(), m_touch)
+            .release(0, QPoint(190, 346), &canvas())
+            .release(1, QPoint(360, 346), &canvas())
+            .release(2, QPoint(674, 346), &canvas());
+        QCOMPARE(page().objectCount(), 3);
+        std::vector<ObjectId> strokes;
+        for (const auto& o : page().objects())
+            strokes.push_back(o->id());
+        // Three fingers held together still wipe in this mode: the middle stroke is erased where
+        // the wipe passed, the others stay, and the fingers add no ink (a single "Erase" step).
+        const int commandsBefore = doc().commands().index();
+        threeFingerWipe(370, 230);
+        QCOMPARE(doc().commands().index(), commandsBefore + 1);
+        int survivors = 0;
+        for (const ObjectId& id : strokes)
+            survivors += page().object(id) != nullptr;
+        QCOMPARE(survivors, 2);
+        for (const auto& o : page().objects())
+            QCOMPARE(o->type(), ObjectType::Stroke);
+        canvas().input().setMultiUserTouch(false);
     }
 
     void resizeAndRotateHandles()

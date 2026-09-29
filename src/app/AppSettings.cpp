@@ -125,7 +125,7 @@ void AppSettings::saveTools(const ToolSettings& t)
     m_store.setValue(QStringLiteral("pen/pressure"), t.pressureEnabled());
     m_store.setValue(QStringLiteral("pen/smoothing"), t.smoothing());
     m_store.setValue(QStringLiteral("pen/shapeRecognition"), t.shapeRecognition());
-    if (t.penStyle() == StrokeStyle::Highlighter)
+    if (t.usesHighlighterWidth())
         m_store.setValue(QStringLiteral("pen/highlighterWidth"), t.penWidth());
     else
         m_store.setValue(QStringLiteral("pen/width"), t.penWidth());

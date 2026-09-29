@@ -1,6 +1,7 @@
 #include "tools/PenTool.h"
 
 #include "ai/ShapeRecognizer.h"
+#include "canvas/MagicHighlightLayer.h"
 #include "canvas/ViewTransform.h"
 #include "core/Geometry.h"
 #include "document/Commands.h"
@@ -47,6 +48,7 @@ void PenTool::pointerDown(const PointerEvent& e)
     s.ink = host().settings().ink();
     // Pressure only when the device reports it; mouse and touch give uniform ink.
     s.ink.pressure = s.ink.pressure && e.hasPressure;
+    s.magic = host().settings().magicHighlighter();
     s.start = e.pagePos;
     const qreal tol = host().viewToPageLength(host().theme().dp(26));
     host().instruments().edgeConstraint(e.pagePos, tol, &s.constraint);
@@ -156,6 +158,13 @@ void PenTool::finish(int pointerId)
         s.points = simplified;
     }
 
+    if (s.magic) {
+        // Temporary highlight: shown by the effect layer, never a document object or undo step.
+        host().magicHighlights().add(page->id(), s.points, s.ink);
+        host().updateOverlay(dirty);
+        return;
+    }
+
     std::vector<ObjectPtr> objects;
     QString text = QObject::tr("Draw");
     if (host().settings().shapeRecognition() && !s.constraint.isValid() && s.points.size() >= 4) {
@@ -188,8 +197,12 @@ void PenTool::pageChanged()
 
 void PenTool::paintOverlay(QPainter& painter) const
 {
-    for (const LiveStroke& s : m_live)
-        StrokeObject::paintPoints(painter, s.points, s.ink);
+    for (const LiveStroke& s : m_live) {
+        if (s.magic)
+            MagicHighlightLayer::paintStroke(painter, s.points, s.ink, 1.0);
+        else
+            StrokeObject::paintPoints(painter, s.points, s.ink);
+    }
 }
 
 void PenTool::paintViewOverlay(QPainter& painter) const
