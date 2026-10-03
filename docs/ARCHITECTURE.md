@@ -73,10 +73,19 @@ QMouseEvent / QTabletEvent / QTouchEvent
 
 * Mouse events that the OS or Qt synthesises from touch and pen are ignored, because those
   devices are handled natively.
-* **Touch state machine.** One finger draws. A second finger that arrives while the stroke is
-  still young (it has moved less than 7 mm, or it started less than 120 ms ago and is shorter
-  than 20 mm) cancels the stroke and starts pan/zoom. Otherwise the extra finger is ignored, so
-  a line that is really being drawn is never interrupted.
+* **Ten-point touch.** Every contact is tracked by its own touch id and gets one role: *write*
+  (its own pointer, independent of all others), *gesture* (pan/zoom), *palm* (wipe) or
+  *ignored*. A new finger writes unless:
+  * it completes a tight group of three (wipe, see below);
+  * a pan/zoom is running: a finger near the gesture centre joins it, others are ignored
+    until lifted (writing while the view moves would bend the line);
+  * it is a second finger of the same hand: within 160 mm of the only finger currently
+    writing, whose stroke is still young (moved less than 7 mm, or started less than 120 ms
+    ago and shorter than 20 mm). That stroke is cancelled and the two fingers pan/zoom.
+    Zoom therefore never starts while somebody else is writing, and an established line is
+    never interrupted.
+  Fingers left over from a gesture never start drawing. The "every finger draws" setting
+  (`setMultiUserTouch`) turns pan/zoom off.
 * **Pen priority.** While the stylus touches the board or hovers over it (and for 400 ms
   afterwards) new touches are ignored, so the writing hand neither draws nor palm-erases. A
   young finger stroke is cancelled when the pen lands.
@@ -85,9 +94,9 @@ QMouseEvent / QTabletEvent / QTouchEvent
   contact, start the *wipe*: one grouped gesture driven only by the fingers of the group, that
   never produces pointer events and becomes one undo step. All thresholds are in
   `input/PalmGesture.h`. The eraser splits ink under the wipe and removes other objects it
-  hits (their own `hitTest`), except pictures and imported pages. An optional multi-user mode
-  lets every finger draw on its own; there a tight group of three still becomes a wipe (its
-  fingers' just-started strokes are cancelled) while the other fingers keep drawing.
+  hits (their own `hitTest`), except pictures and imported pages. Other people keep writing
+  during a wipe; fingers within 160 mm of it belong to the wiping hand and are ignored. The
+  group's just-started strokes are cancelled.
 * Every pointer belongs to the tool that received its *down* event, so switching tools in the
   middle of a stroke is safe. The stylus eraser end is routed to the eraser automatically.
 

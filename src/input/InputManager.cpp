@@ -4,6 +4,7 @@
 #include "input/PalmGesture.h"
 
 #include <QMouseEvent>
+#include <QSet>
 #include <QTabletEvent>
 #include <QTouchEvent>
 #include <QWheelEvent>
@@ -22,6 +23,14 @@ namespace {
 constexpr qreal kYoungStrokeMm = 7.0;      // moved less than this: always young
 constexpr qint64 kYoungStrokeMs = 120;     // started less than this ago ...
 constexpr qreal kYoungStrokeMaxMm = 20.0;  // ... and moved less than this: young
+// Ten-point touch: every finger writes on its own. Two fingers of ONE hand (closer than this)
+// zoom and pan instead, while nobody else is writing; fingers further apart are different
+// people writing at the same time.
+constexpr qreal kPinchMaxSpanMm = 160.0;
+// While zooming, a finger this close to the gesture centre joins it (three-finger pan).
+constexpr qreal kGestureJoinMm = 160.0;
+// While wiping, other fingers this close to the wipe belong to the same hand and are ignored.
+constexpr qreal kWipeHandReachMm = 160.0;
 // The wipe eraser thresholds are in input/PalmGesture.h.
 } // namespace
 
@@ -74,28 +83,12 @@ void InputManager::cancelAll()
         m_sink.pointerEvent(pe);
         m_stylusDown = false;
     }
-    switch (m_mode) {
-    case TouchMode::Pointer:
-    case TouchMode::MultiDraw:
-        for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it)
-            if (it->forwarded)
-                forwardTouch(it.key(), PointerPhase::Cancel, *it, Qt::NoModifier);
-        break;
-    case TouchMode::PanZoom: {
-        GestureEvent g;
-        g.type = GestureType::PanZoom;
-        g.phase = GesturePhase::Cancel;
-        m_sink.gestureEvent(g);
-        break;
-    }
-    default:
-        break;
-    }
-    // What was wiped so far stays (one undo step).
-    endPalm();
+    for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it)
+        if (it->role == Role::Write)
+            forwardTouch(it.key(), PointerPhase::Cancel, *it, Qt::NoModifier);
+    endPanZoom(GesturePhase::Cancel); // the view is restored
+    endPalm();                        // what was wiped so far stays (one undo step)
     m_tracks.clear();
-    m_mode = TouchMode::None;
-    m_primaryId = -1;
 }
 
 bool InputManager::stylusActive() const
@@ -105,17 +98,18 @@ bool InputManager::stylusActive() const
 
 InputManager::TouchState InputManager::touchState() const
 {
+    if (m_tracks.isEmpty())
+        return TouchState::Idle;
     if (palmActive())
         return TouchState::PalmErase;
-    switch (m_mode) {
-    case TouchMode::None: return TouchState::Idle;
-    case TouchMode::Pointer: return TouchState::Drawing;
-    case TouchMode::MultiDraw: return TouchState::MultiDrawing;
-    case TouchMode::PanZoom: return TouchState::PanZoom;
-    case TouchMode::PalmErase: return TouchState::PalmErase;
-    case TouchMode::WaitRelease: return TouchState::Ignoring;
-    }
-    return TouchState::Idle;
+    if (m_panZoom)
+        return TouchState::PanZoom;
+    const int writers = countRole(Role::Write);
+    if (writers == 1)
+        return TouchState::Drawing;
+    if (writers > 1)
+        return TouchState::MultiDrawing;
+    return TouchState::Ignoring;
 }
 
 // ------------------------------------------------------------------------------------------ mouse
@@ -191,27 +185,13 @@ bool InputManager::handleTablet(QTabletEvent* e)
         if (!m_stylusDown) {
             // Pen priority: a hand that touched the board just before the pen must not leave ink or
             // keep zooming. Young finger strokes are cancelled; the fingers are ignored until lifted.
-            if (m_mode == TouchMode::Pointer || m_mode == TouchMode::MultiDraw) {
-                for (auto it = m_tracks.begin(); it != m_tracks.end(); ++it) {
-                    if (it->forwarded) {
-                        forwardTouch(it.key(), PointerPhase::Cancel, *it, Qt::NoModifier);
-                        it->forwarded = false;
-                    }
-                }
-                endPalm(); // a wipe running beside multi-user drawing
-                m_primaryId = -1;
-                m_mode = TouchMode::WaitRelease;
-            } else if (m_mode == TouchMode::PanZoom) {
-                GestureEvent g;
-                g.type = GestureType::PanZoom;
-                g.phase = GesturePhase::End;
-                g.centroid = m_prevCentroid;
-                m_sink.gestureEvent(g);
-                m_mode = TouchMode::WaitRelease;
-            } else if (m_mode == TouchMode::PalmErase) {
-                endPalm();
-                m_mode = TouchMode::WaitRelease;
-            }
+            const QList<int> ids = m_tracks.keys();
+            for (int id : ids)
+                cancelWriting(id);
+            endPanZoom(GesturePhase::End);
+            endPalm();
+            for (Track& t : m_tracks)
+                t.role = Role::Ignored;
             m_stylusDown = true;
             m_stylusDevice = pe.device;
             pe.phase = PointerPhase::Down;
@@ -274,32 +254,65 @@ void InputManager::forwardTouch(int id, PointerPhase phase, const Track& t, Qt::
     m_sink.pointerEvent(pe);
 }
 
+void InputManager::cancelWriting(int id)
+{
+    auto it = m_tracks.find(id);
+    if (it == m_tracks.end() || it->role != Role::Write)
+        return;
+    forwardTouch(id, PointerPhase::Cancel, *it, Qt::NoModifier);
+    it->role = Role::Ignored;
+}
+
+int InputManager::countRole(Role role) const
+{
+    int n = 0;
+    for (const Track& t : m_tracks)
+        n += t.role == role;
+    return n;
+}
+
+bool InputManager::isYoung(const Track& t, qint64 now) const
+{
+    const qreal moved = geom::distance(t.start, t.pos);
+    return moved < kYoungStrokeMm * m_pixelsPerMm
+        || ((now - t.startTime) < kYoungStrokeMs && moved < kYoungStrokeMaxMm * m_pixelsPerMm);
+}
+
 QPointF InputManager::centroid() const
 {
     QPointF c;
-    if (m_tracks.isEmpty())
-        return c;
-    for (const Track& t : m_tracks)
+    int n = 0;
+    for (const Track& t : m_tracks) {
+        if (t.role != Role::Gesture)
+            continue;
         c += t.pos;
-    return c / m_tracks.size();
+        ++n;
+    }
+    return n > 0 ? c / n : m_prevCentroid;
 }
 
 qreal InputManager::spread(const QPointF& c) const
 {
-    if (m_tracks.isEmpty())
-        return 0.0;
     qreal s = 0.0;
-    for (const Track& t : m_tracks)
+    int n = 0;
+    for (const Track& t : m_tracks) {
+        if (t.role != Role::Gesture)
+            continue;
         s += geom::distance(t.pos, c);
-    return s / m_tracks.size();
+        ++n;
+    }
+    return n > 0 ? s / n : 0.0;
 }
 
 qreal InputManager::angle(const QPointF& c) const
 {
     Q_UNUSED(c);
-    if (m_tracks.size() < 2)
+    QList<int> ids;
+    for (auto it = m_tracks.constBegin(); it != m_tracks.constEnd(); ++it)
+        if (it->role == Role::Gesture)
+            ids << it.key();
+    if (ids.size() < 2)
         return 0.0;
-    QList<int> ids = m_tracks.keys();
     std::sort(ids.begin(), ids.end());
     return geom::angleDeg(m_tracks.value(ids[1]).pos - m_tracks.value(ids[0]).pos);
 }
@@ -315,7 +328,7 @@ QPointF InputManager::palmCentroid() const
         c += it->pos;
         ++n;
     }
-    return n > 0 ? c / n : m_prevCentroid;
+    return n > 0 ? c / n : m_prevPalmCentroid;
 }
 
 qreal InputManager::palmRadius(const QPointF& c) const
@@ -351,7 +364,7 @@ QVector<int> InputManager::findPalmGroup(int newId, qint64 now) const
     };
     std::vector<Candidate> candidates;
     for (auto it = m_tracks.constBegin(); it != m_tracks.constEnd(); ++it) {
-        if (it.key() == newId)
+        if (it.key() == newId || it->role == Role::Ignored)
             continue;
         if (now - it->startTime > PALM_ERASER_GROUP_WINDOW_MS)
             continue;
@@ -375,6 +388,32 @@ QVector<int> InputManager::findPalmGroup(int newId, qint64 now) const
     return ids;
 }
 
+int InputManager::findPinchPartner(int newId, qint64 now) const
+{
+    // Two fingers of one hand placed close together zoom and pan, but only while nobody else is
+    // writing (moving the view would bend their lines) and only if the other finger's line has
+    // only just started. Fingers further apart are different people writing.
+    if (m_multiUser || palmActive() || m_panZoom)
+        return -1;
+    auto added = m_tracks.constFind(newId);
+    if (added == m_tracks.constEnd())
+        return -1;
+    int partner = -1;
+    for (auto it = m_tracks.constBegin(); it != m_tracks.constEnd(); ++it) {
+        if (it.key() == newId || it->role != Role::Write)
+            continue;
+        if (partner >= 0)
+            return -1; // two or more people are writing
+        partner = it.key();
+    }
+    if (partner < 0)
+        return -1;
+    const Track& p = m_tracks[partner];
+    if (!isYoung(p, now) || geom::distance(p.pos, added->pos) > kPinchMaxSpanMm * m_pixelsPerMm)
+        return -1;
+    return partner;
+}
+
 void InputManager::rebaseline()
 {
     m_prevCentroid = centroid();
@@ -384,13 +423,13 @@ void InputManager::rebaseline()
 
 void InputManager::beginPanZoom()
 {
-    m_mode = TouchMode::PanZoom;
+    m_panZoom = true;
     rebaseline();
     GestureEvent g;
     g.type = GestureType::PanZoom;
     g.phase = GesturePhase::Begin;
     g.centroid = m_prevCentroid;
-    g.touchCount = m_tracks.size();
+    g.touchCount = countRole(Role::Gesture);
     m_sink.gestureEvent(g);
 }
 
@@ -399,35 +438,49 @@ void InputManager::updatePanZoom()
     const QPointF c = centroid();
     const qreal s = spread(c);
     const qreal a = angle(c);
+    const int n = countRole(Role::Gesture);
     GestureEvent g;
     g.type = GestureType::PanZoom;
     g.phase = GesturePhase::Update;
     g.centroid = c;
     g.panDelta = c - m_prevCentroid;
     g.scaleDelta = (m_prevSpread > 8.0 && s > 8.0) ? s / m_prevSpread : 1.0;
-    g.rotationDelta = m_tracks.size() >= 2 ? geom::angleDifference(m_prevAngle, a) : 0.0;
-    g.touchCount = m_tracks.size();
+    g.rotationDelta = n >= 2 ? geom::angleDifference(m_prevAngle, a) : 0.0;
+    g.touchCount = n;
     m_prevCentroid = c;
     m_prevSpread = s;
     m_prevAngle = a;
     m_sink.gestureEvent(g);
 }
 
+void InputManager::endPanZoom(GesturePhase phase)
+{
+    if (!m_panZoom)
+        return;
+    GestureEvent g;
+    g.type = GestureType::PanZoom;
+    g.phase = phase;
+    g.centroid = m_prevCentroid;
+    m_sink.gestureEvent(g);
+    m_panZoom = false;
+    // Fingers left over from the gesture never start drawing.
+    for (Track& t : m_tracks)
+        if (t.role == Role::Gesture)
+            t.role = Role::Ignored;
+}
+
 void InputManager::beginPalm(const QVector<int>& ids)
 {
-    // Fingers of the group that were already drawing (multi-user mode) leave no ink.
+    // One gesture at a time: a wipe replaces a pan / zoom that was just starting.
+    endPanZoom(GesturePhase::Cancel);
+    // Fingers of the group that had started a line leave no ink.
     for (int id : ids) {
+        cancelWriting(id);
         auto it = m_tracks.find(id);
-        if (it != m_tracks.end() && it->forwarded) {
-            forwardTouch(id, PointerPhase::Cancel, *it, Qt::NoModifier);
-            it->forwarded = false;
-        }
-        if (id == m_primaryId)
-            m_primaryId = -1;
+        if (it != m_tracks.end())
+            it->role = Role::Palm;
     }
     m_palmIds = ids;
-    // In multi-user mode the other fingers keep drawing next to the wipe.
-    m_mode = m_multiUser ? TouchMode::MultiDraw : TouchMode::PalmErase;
     updatePalm(GesturePhase::Begin);
 }
 
@@ -439,7 +492,7 @@ void InputManager::updatePalm(GesturePhase phase)
     g.centroid = palmCentroid();
     g.radius = palmRadius(g.centroid);
     g.touchCount = m_palmIds.size();
-    m_prevCentroid = g.centroid;
+    m_prevPalmCentroid = g.centroid;
     m_sink.gestureEvent(g);
 }
 
@@ -448,7 +501,50 @@ void InputManager::endPalm()
     if (!palmActive())
         return;
     updatePalm(GesturePhase::End);
+    for (int id : m_palmIds) {
+        auto it = m_tracks.find(id);
+        if (it != m_tracks.end())
+            it->role = Role::Ignored;
+    }
     m_palmIds.clear();
+}
+
+void InputManager::classifyNewTouch(int id, qint64 now, Qt::KeyboardModifiers mods)
+{
+    Track& t = m_tracks[id];
+    t.role = Role::Ignored;
+    if (stylusActive())
+        return; // pen priority: the writing hand rests on the board
+    const QVector<int> group = findPalmGroup(id, now);
+    if (!group.isEmpty()) {
+        beginPalm(group);
+        return;
+    }
+    if (m_palmEnabled && !palmActive() && isPalmContact(t)) {
+        beginPalm({id});
+        return;
+    }
+    if (m_panZoom) {
+        // Another finger of the zooming hand joins; anyone else waits until the view is still.
+        if (geom::distance(t.pos, centroid()) <= kGestureJoinMm * m_pixelsPerMm) {
+            t.role = Role::Gesture;
+            rebaseline();
+        }
+        return;
+    }
+    if (palmActive() && geom::distance(t.pos, palmCentroid()) <= kWipeHandReachMm * m_pixelsPerMm)
+        return; // thumb or palm of the wiping hand
+    const int partner = findPinchPartner(id, now);
+    if (partner >= 0) {
+        cancelWriting(partner);
+        m_tracks[partner].role = Role::Gesture;
+        m_tracks[id].role = Role::Gesture;
+        beginPanZoom();
+        return;
+    }
+    // A finger of its own: it writes (every finger independently, up to the panel's limit).
+    t.role = Role::Write;
+    forwardTouch(id, PointerPhase::Down, t, mods);
 }
 
 bool InputManager::handleTouch(QTouchEvent* e)
@@ -463,20 +559,20 @@ bool InputManager::handleTouch(QTouchEvent* e)
     const auto& points = e->touchPoints();
 
     // 1. Update positions of known tracks.
-    bool anyMoved = false;
+    QSet<int> moved;
     for (const QTouchEvent::TouchPoint& tp : points) {
         auto it = m_tracks.find(tp.id());
         if (it == m_tracks.end())
             continue;
         if (it->pos != tp.pos()) {
             it->pos = tp.pos();
-            anyMoved = true;
+            moved.insert(tp.id());
         }
         const QSizeF d = tp.ellipseDiameters();
         it->diameter = std::max(it->diameter, std::max(d.width(), d.height()));
     }
 
-    // 2. New contacts.
+    // 2. New contacts, each tracked by its own touch id.
     for (const QTouchEvent::TouchPoint& tp : points) {
         if (tp.state() != Qt::TouchPointPressed || m_tracks.contains(tp.id()))
             continue;
@@ -487,113 +583,30 @@ bool InputManager::handleTouch(QTouchEvent* e)
         const QSizeF d = tp.ellipseDiameters();
         t.diameter = std::max(d.width(), d.height());
         m_tracks.insert(tp.id(), t);
-
-        switch (m_mode) {
-        case TouchMode::None:
-            if (stylusActive()) {
-                // The pen is writing or hovering: this is the writing hand resting on the board.
-                m_mode = TouchMode::WaitRelease;
-            } else if (m_palmEnabled && isPalmContact(t)) {
-                beginPalm({tp.id()});
-            } else if (m_multiUser) {
-                m_mode = TouchMode::MultiDraw;
-                m_tracks[tp.id()].forwarded = true;
-                forwardTouch(tp.id(), PointerPhase::Down, t, mods);
-            } else {
-                m_mode = TouchMode::Pointer;
-                m_primaryId = tp.id();
-                m_tracks[tp.id()].forwarded = true;
-                forwardTouch(tp.id(), PointerPhase::Down, t, mods);
-            }
-            break;
-        case TouchMode::Pointer: {
-            const Track primary = m_tracks.value(m_primaryId);
-            const qreal moved = geom::distance(primary.start, primary.pos);
-            const bool young = moved < kYoungStrokeMm * m_pixelsPerMm
-                || ((now - primary.startTime) < kYoungStrokeMs && moved < kYoungStrokeMaxMm * m_pixelsPerMm);
-            if (young) {
-                forwardTouch(m_primaryId, PointerPhase::Cancel, primary, mods);
-                m_tracks[m_primaryId].forwarded = false;
-                m_primaryId = -1;
-                const QVector<int> group = findPalmGroup(tp.id(), now);
-                if (!group.isEmpty())
-                    beginPalm(group);
-                else if (m_palmEnabled && isPalmContact(t))
-                    beginPalm({tp.id()});
-                else
-                    beginPanZoom();
-            }
-            // Otherwise the extra finger is ignored so an ongoing stroke is not disturbed.
-            break;
-        }
-        case TouchMode::MultiDraw: {
-            // Every finger writes on its own, unless it completes a tight group (a wipe).
-            const QVector<int> group = findPalmGroup(tp.id(), now);
-            if (!group.isEmpty()) {
-                beginPalm(group);
-            } else if (m_palmEnabled && !palmActive() && isPalmContact(t)) {
-                beginPalm({tp.id()});
-            } else {
-                m_tracks[tp.id()].forwarded = true;
-                forwardTouch(tp.id(), PointerPhase::Down, t, mods);
-            }
-            break;
-        }
-        case TouchMode::PanZoom: {
-            const QVector<int> group = findPalmGroup(tp.id(), now);
-            if (!group.isEmpty()) {
-                GestureEvent g;
-                g.type = GestureType::PanZoom;
-                g.phase = GesturePhase::Cancel;
-                m_sink.gestureEvent(g);
-                beginPalm(group);
-            } else {
-                rebaseline();
-            }
-            break;
-        }
-        case TouchMode::PalmErase:
-        case TouchMode::WaitRelease:
-            break;
-        }
+        classifyNewTouch(tp.id(), now, mods);
     }
 
     // 3. Movement.
-    if (anyMoved) {
-        switch (m_mode) {
-        case TouchMode::Pointer:
-            if (m_primaryId >= 0 && m_tracks.contains(m_primaryId))
-                forwardTouch(m_primaryId, PointerPhase::Move, m_tracks.value(m_primaryId), mods);
-            break;
-        case TouchMode::MultiDraw: {
-            bool palmMoved = false;
-            for (const QTouchEvent::TouchPoint& tp : points) {
-                if (tp.state() != Qt::TouchPointMoved)
-                    continue;
-                auto it = m_tracks.constFind(tp.id());
-                if (it != m_tracks.constEnd() && it->forwarded)
-                    forwardTouch(tp.id(), PointerPhase::Move, *it, mods);
-                palmMoved = palmMoved || m_palmIds.contains(tp.id());
+    if (!moved.isEmpty()) {
+        bool gestureMoved = false;
+        bool palmMoved = false;
+        for (const QTouchEvent::TouchPoint& tp : points) {
+            if (!moved.contains(tp.id()))
+                continue;
+            auto it = m_tracks.constFind(tp.id());
+            if (it == m_tracks.constEnd())
+                continue;
+            switch (it->role) {
+            case Role::Write: forwardTouch(tp.id(), PointerPhase::Move, *it, mods); break;
+            case Role::Gesture: gestureMoved = true; break;
+            case Role::Palm: palmMoved = true; break;
+            case Role::Ignored: break;
             }
-            if (palmMoved)
-                updatePalm(GesturePhase::Update);
-            break;
         }
-        case TouchMode::PanZoom:
+        if (gestureMoved && m_panZoom)
             updatePanZoom();
-            break;
-        case TouchMode::PalmErase: {
-            // Only the fingers of the group steer the wipe; other fingers are ignored.
-            bool palmMoved = false;
-            for (const QTouchEvent::TouchPoint& tp : points)
-                palmMoved = palmMoved || (tp.state() == Qt::TouchPointMoved && m_palmIds.contains(tp.id()));
-            if (palmMoved)
-                updatePalm(GesturePhase::Update);
-            break;
-        }
-        default:
-            break;
-        }
+        if (palmMoved)
+            updatePalm(GesturePhase::Update);
     }
 
     // 4. Released contacts.
@@ -603,59 +616,25 @@ bool InputManager::handleTouch(QTouchEvent* e)
         auto it = m_tracks.find(tp.id());
         if (it == m_tracks.end())
             continue;
-        const Track t = *it;
-        it->pos = tp.pos();
-        switch (m_mode) {
-        case TouchMode::Pointer:
-            if (tp.id() == m_primaryId) {
-                Track released = t;
-                released.pos = tp.pos();
-                forwardTouch(tp.id(), PointerPhase::Up, released, mods);
-                m_primaryId = -1;
-            }
-            m_tracks.remove(tp.id());
-            m_mode = m_tracks.isEmpty() ? TouchMode::None : TouchMode::WaitRelease;
-            if (m_primaryId >= 0)
-                m_mode = TouchMode::Pointer;
+        Track t = *it;
+        t.pos = tp.pos();
+        m_tracks.erase(it);
+        switch (t.role) {
+        case Role::Write:
+            forwardTouch(tp.id(), PointerPhase::Up, t, mods);
             break;
-        case TouchMode::MultiDraw:
-            if (t.forwarded) {
-                Track released = t;
-                released.pos = tp.pos();
-                forwardTouch(tp.id(), PointerPhase::Up, released, mods);
-            }
-            m_tracks.remove(tp.id());
-            if (m_palmIds.removeAll(tp.id()) > 0 && m_palmIds.isEmpty())
-                updatePalm(GesturePhase::End); // the last finger of the group was lifted
-            if (m_tracks.isEmpty())
-                m_mode = TouchMode::None;
+        case Role::Gesture:
+            if (countRole(Role::Gesture) < 2)
+                endPanZoom(GesturePhase::End);
+            else
+                rebaseline(); // no jump: the remaining fingers continue smoothly
             break;
-        case TouchMode::PanZoom:
-            m_tracks.remove(tp.id());
-            if (m_tracks.size() < 2) {
-                GestureEvent g;
-                g.type = GestureType::PanZoom;
-                g.phase = GesturePhase::End;
-                g.centroid = m_prevCentroid;
-                m_sink.gestureEvent(g);
-                m_mode = m_tracks.isEmpty() ? TouchMode::None : TouchMode::WaitRelease;
-            } else {
-                rebaseline();
-            }
-            break;
-        case TouchMode::PalmErase:
+        case Role::Palm:
             // The wipe stays active until every finger of the group is lifted.
-            m_tracks.remove(tp.id());
             if (m_palmIds.removeAll(tp.id()) > 0 && m_palmIds.isEmpty())
-                updatePalm(GesturePhase::End); // the last finger of the group was lifted
-            if (!palmActive())
-                m_mode = m_tracks.isEmpty() ? TouchMode::None : TouchMode::WaitRelease;
+                updatePalm(GesturePhase::End);
             break;
-        case TouchMode::WaitRelease:
-        case TouchMode::None:
-            m_tracks.remove(tp.id());
-            if (m_tracks.isEmpty())
-                m_mode = TouchMode::None;
+        case Role::Ignored:
             break;
         }
     }

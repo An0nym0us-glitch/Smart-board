@@ -447,8 +447,9 @@ SettingsPanel::SettingsPanel(const AppServices& s, QWidget* parent)
         sp->canvas.input().setPalmEraseEnabled(on);
     });
     layout->addWidget(palm);
-    auto* multi = new ToggleRow(ui, tr("Several people drawing"), this);
-    multi->setDescription(tr("Every finger draws; two-finger zoom is turned off"));
+    auto* multi = new ToggleRow(ui, tr("Every finger draws"), this);
+    multi->setDescription(tr("Turns two-finger zoom off, so fingers close together also draw. "
+                             "Several people can always write at once."));
     multi->setChecked(settings->multiUserTouch());
     connect(multi, &ToggleRow::toggled, this, [sp, settings](bool on) {
         settings->setMultiUserTouch(on);

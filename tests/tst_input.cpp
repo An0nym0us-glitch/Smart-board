@@ -255,7 +255,7 @@ private slots:
         QVERIFY(r.gestures.isEmpty());
     }
 
-    void establishedStrokeIgnoresSecondFinger()
+    void establishedStrokeContinuesWhileAnotherFingerWrites()
     {
         Recorder r;
         InputManager input(r);
@@ -263,13 +263,109 @@ private slots:
         t.press(1, QPointF(100, 100));
         QTest::qWait(320);
         t.move(1, QPointF(300, 100));
-        t.press(2, QPointF(600, 600));
+        t.press(2, QPointF(600, 600)); // a line is being drawn: a new finger is another writer
         t.move(1, QPointF(320, 110));
+        t.move(2, QPointF(640, 620));
         t.release(2);
         t.release(1);
         QCOMPARE(r.count(PointerPhase::Cancel), 0);
-        QCOMPARE(r.count(PointerPhase::Up), 1);
+        QCOMPARE(r.count(PointerPhase::Down), 2);
+        QCOMPARE(r.count(PointerPhase::Up), 2);
         QVERIFY(r.gestures.isEmpty());
+    }
+
+    void tenFingersWriteIndependently()
+    {
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0); // 1 px = 1 mm: fingers 250 mm apart, ten people at the board
+        TouchScript t(input);
+        for (int id = 0; id < 10; ++id)
+            t.press(id, QPointF(100 + (id % 5) * 250, 100 + (id / 5) * 400));
+        QCOMPARE(input.touchState(), InputManager::TouchState::MultiDrawing);
+        for (int step = 1; step <= 5; ++step)
+            for (int id = 0; id < 10; ++id)
+                t.move(id, QPointF(100 + (id % 5) * 250 + step * 10, 100 + (id / 5) * 400 + step * 8));
+        for (int id = 0; id < 10; ++id)
+            t.release(id);
+        QVERIFY(r.gestures.isEmpty());
+        QCOMPARE(r.count(PointerPhase::Down), 10);
+        QCOMPARE(r.count(PointerPhase::Move), 50);
+        QCOMPARE(r.count(PointerPhase::Up), 10);
+        QCOMPARE(r.count(PointerPhase::Cancel), 0);
+        // Every finger is its own pointer, and its moves stay with it.
+        QHash<int, int> moves;
+        for (const auto& p : r.pointers)
+            if (p.phase == PointerPhase::Move)
+                ++moves[p.pointerId];
+        QCOMPARE(moves.size(), 10);
+        for (int id = 0; id < 10; ++id)
+            QCOMPARE(moves.value(InputManager::kTouchPointerBase + id), 5);
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
+    }
+
+    void twoPeopleStartingTogetherBothWrite()
+    {
+        // Two fingers far apart landing at the same moment are two people, not a pinch.
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0);
+        TouchScript t(input);
+        t.pressMany({{1, QPointF(100, 300)}, {2, QPointF(700, 300)}});
+        QCOMPARE(input.touchState(), InputManager::TouchState::MultiDrawing);
+        t.move(1, QPointF(150, 320));
+        t.move(2, QPointF(650, 320));
+        t.release(1);
+        t.release(2);
+        QVERIFY(r.gestures.isEmpty());
+        QCOMPARE(r.count(PointerPhase::Up), 2);
+    }
+
+    void noZoomWhileSomeoneElseWrites()
+    {
+        // A pupil writes on the left; two fingers close together on the right are two writers
+        // too, because moving the view would bend the pupil's line.
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0);
+        TouchScript t(input);
+        t.press(1, QPointF(100, 300));
+        t.move(1, QPointF(200, 300));
+        t.press(2, QPointF(800, 300));
+        t.press(3, QPointF(860, 300));
+        QCOMPARE(r.count(GestureType::PanZoom, GesturePhase::Begin), 0);
+        QCOMPARE(r.count(PointerPhase::Down), 3);
+        QCOMPARE(r.count(PointerPhase::Cancel), 0);
+        for (int id = 1; id <= 3; ++id)
+            t.release(id);
+        QCOMPARE(r.count(PointerPhase::Up), 3);
+    }
+
+    void fingersLandingWhileZoomingWait()
+    {
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0);
+        TouchScript t(input);
+        t.press(1, QPointF(400, 300));
+        t.press(2, QPointF(480, 300));
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        t.press(3, QPointF(1200, 300)); // someone else, far away: waits, does not draw
+        t.move(3, QPointF(1250, 320));
+        t.move(2, QPointF(560, 300));
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        QVERIFY(r.gestures.last().scaleDelta > 1.0);
+        QCOMPARE(r.count(PointerPhase::Down), 1); // only finger 1, cancelled when the pinch began
+        t.release(3);
+        t.release(1);
+        t.release(2);
+        QCOMPARE(r.count(GestureType::PanZoom, GesturePhase::End), 1);
+        QCOMPARE(r.count(PointerPhase::Up), 0);
+        // The board is free again: a single finger writes.
+        t.press(4, QPointF(200, 200));
+        QCOMPARE(input.touchState(), InputManager::TouchState::Drawing);
+        t.release(4);
+        QCOMPARE(r.count(PointerPhase::Up), 1);
     }
 };
 
@@ -377,14 +473,15 @@ private slots:
         t.release(2);
         t.move(1, QPointF(300, 150));
         t.release(1);
+        // The line is never interrupted; the other fingers are writers of their own.
         QCOMPARE(r.count(PointerPhase::Cancel), 0);
-        QCOMPARE(r.count(PointerPhase::Down), 1);
-        QCOMPARE(r.count(PointerPhase::Up), 1);
-        QVERIFY(r.count(PointerPhase::Move) >= 3);
+        QCOMPARE(r.count(PointerPhase::Down), 3);
+        QCOMPARE(r.count(PointerPhase::Up), 3);
         QVERIFY(r.gestures.isEmpty());
-        // Extra fingers never produced pointer events of their own.
+        int firstFingerMoves = 0;
         for (const auto& p : r.pointers)
-            QCOMPARE(p.pointerId, InputManager::kTouchPointerBase + 1);
+            firstFingerMoves += p.pointerId == InputManager::kTouchPointerBase + 1 && p.phase == PointerPhase::Move;
+        QCOMPARE(firstFingerMoves, 3);
     }
 
     void youngStrokeByTimeButNotDistance()

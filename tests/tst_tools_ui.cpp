@@ -212,6 +212,41 @@ private slots:
         m_window->activateTool(ToolId::Pen);
     }
 
+    void tenPointTouchByDefault()
+    {
+        clearPage();
+        m_window->activateTool(ToolId::Pen);
+        QVERIFY(!canvas().input().multiUserTouch());
+        const qreal ppm = canvas().input().pixelsPerMm();
+        canvas().input().setPixelsPerMm(1.0); // fingers 180 px = 180 mm apart: separate people
+        const qreal zoom = canvas().zoom();
+        auto press = QTest::touchEvent(&canvas(), m_touch);
+        for (int f = 0; f < 4; ++f)
+            press.press(f, QPoint(80 + f * 180, 150), &canvas());
+        press.commit();
+        for (int i = 1; i <= 8; ++i) {
+            auto move = QTest::touchEvent(&canvas(), m_touch);
+            for (int f = 0; f < 4; ++f)
+                move.move(f, QPoint(80 + f * 180 + i * 6, 150 + i * 30), &canvas());
+        }
+        auto release = QTest::touchEvent(&canvas(), m_touch);
+        for (int f = 0; f < 4; ++f)
+            release.release(f, QPoint(80 + f * 180 + 48, 390), &canvas());
+        release.commit();
+        // Four independent lines, one undo step each, and the view did not move.
+        QCOMPARE(page().objectCount(), 4);
+        QCOMPARE(canvas().zoom(), zoom);
+        // Two fingers of one hand still zoom on an otherwise idle board.
+        canvas().input().setPixelsPerMm(ppm);
+        QTest::touchEvent(&canvas(), m_touch).press(0, QPoint(400, 300), &canvas()).press(1, QPoint(460, 300), &canvas());
+        for (int i = 1; i <= 8; ++i)
+            QTest::touchEvent(&canvas(), m_touch).move(0, QPoint(400 - i * 10, 300), &canvas()).move(1, QPoint(460 + i * 10, 300), &canvas());
+        QTest::touchEvent(&canvas(), m_touch).release(0, QPoint(320, 300), &canvas()).release(1, QPoint(540, 300), &canvas());
+        QVERIFY(canvas().zoom() > zoom * 2.0);
+        QCOMPARE(page().objectCount(), 4);
+        canvas().fitPage();
+    }
+
     void separatedFingersWriteInMultiUserMode()
     {
         clearPage();

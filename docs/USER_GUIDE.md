@@ -25,9 +25,9 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 
 | Action | Touch | Pen | Mouse |
 |---|---|---|---|
-| Draw / use tool | one finger | pen tip | left button |
-| Pan | two fingers | – | right or middle drag, Shift + wheel |
-| Zoom | pinch | – | wheel |
+| Draw / use tool | one finger (every finger on its own: up to 10 at once) | pen tip | left button |
+| Pan | two fingers of one hand | – | right or middle drag, Shift + wheel |
+| Zoom | pinch (two fingers of one hand) | – | wheel |
 | Erase | three fingers held together or flat hand, wipe | pen eraser end | – |
 
 * **Wipe (palm erase)**: put three fingers down side by side, touching or nearly touching, and
@@ -37,11 +37,15 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
   a wipe. You can turn it off in Settings.
 * **Writing with a pen:** while the pen touches or hovers over the board, touches are ignored,
   so the hand resting on the board neither draws nor erases.
-* **Several people drawing** (Settings): every finger draws its own line and two-finger zoom
-  is disabled. Use this when two students write at the board together.
-* A second finger that touches while a line is only just being started (it has barely moved)
-  cancels that line and starts zooming. Once a line is really being drawn, other touches
-  don't interrupt it.
+* **Ten-point touch:** every finger that touches the board on its own writes its own line, so
+  several students can write at the same time (as many fingers as the board reports,
+  usually 10 or 20).
+* **Zoom and pan** with two fingers of one hand (closer than about 16 cm). The second finger
+  must land while the first one's line has only just started; that line is then removed.
+  Zooming only starts when nobody else is writing, so other people's lines are never bent,
+  and fingers that touch somewhere else while you zoom wait until you are done.
+* **Every finger draws** (Settings): turns two-finger zoom off, so fingers close together
+  draw too. Useful with young pupils who zoom by accident.
 
 ## Tools
 
