@@ -79,11 +79,14 @@ QMouseEvent / QTabletEvent / QTouchEvent
   * it completes a tight group of three (wipe, see below);
   * a pan/zoom is running: a finger near the gesture centre joins it, others are ignored
     until lifted (writing while the view moves would bend the line);
-  * it is a second finger of the same hand: within 160 mm of the only finger currently
-    writing, whose stroke is still young (moved less than 7 mm, or started less than 120 ms
-    ago and shorter than 20 mm). That stroke is cancelled and the two fingers pan/zoom.
-    Zoom therefore never starts while somebody else is writing, and an established line is
-    never interrupted.
+  * it pairs with a writing finger whose stroke is still young (moved less than 12 mm, or
+    started less than 350 ms ago and shorter than 30 mm): either within 160 mm (one hand),
+    or within 450 mm and landing at most 200 ms after it (one finger of each hand). Young
+    strokes are cancelled and the two fingers pan/zoom. Any established stroke blocks this,
+    so zoom never starts while somebody is really writing and a real line is never
+    interrupted.
+  All distances are physical millimetres converted with the screen's logical pixels per
+  millimetre (`CanvasWidget::pixelsPerMm`), so they hold at every Windows display scaling.
   Fingers left over from a gesture never start drawing. The "every finger draws" setting
   (`setMultiUserTouch`) turns pan/zoom off.
 * **Pen priority.** While the stylus touches the board or hovers over it (and for 400 ms

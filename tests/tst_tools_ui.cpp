@@ -212,6 +212,18 @@ private slots:
         m_window->activateTool(ToolId::Pen);
     }
 
+    void touchDensityFollowsTheScreen()
+    {
+        // 65" 4K board at 200 % Windows scaling: 1920 x 1080 logical pixels on 1430 x 804 mm.
+        const qreal board = CanvasWidget::pixelsPerMm(QSize(1920, 1080), QSizeF(1430, 804));
+        QVERIFY(std::abs(board - 1.343) < 0.01);
+        // The same board at 100 %: twice as many logical pixels per millimetre.
+        QVERIFY(std::abs(CanvasWidget::pixelsPerMm(QSize(3840, 2160), QSizeF(1430, 804)) - 2 * board) < 0.02);
+        // Missing or nonsensical physical size: 96 dpi.
+        QVERIFY(std::abs(CanvasWidget::pixelsPerMm(QSize(1920, 1080), QSizeF(0, 0)) - 96.0 / 25.4) < 1e-9);
+        QVERIFY(std::abs(CanvasWidget::pixelsPerMm(QSize(3840, 2160), QSizeF(160, 90)) - 96.0 / 25.4) < 1e-9);
+    }
+
     void tenPointTouchByDefault()
     {
         clearPage();
@@ -220,10 +232,11 @@ private slots:
         const qreal ppm = canvas().input().pixelsPerMm();
         canvas().input().setPixelsPerMm(1.0); // fingers 180 px = 180 mm apart: separate people
         const qreal zoom = canvas().zoom();
-        auto press = QTest::touchEvent(&canvas(), m_touch);
-        for (int f = 0; f < 4; ++f)
-            press.press(f, QPoint(80 + f * 180, 150), &canvas());
-        press.commit();
+        // Four students start one after the other (people never land in the same instant).
+        for (int f = 0; f < 4; ++f) {
+            QTest::touchEvent(&canvas(), m_touch).press(f, QPoint(80 + f * 180, 150), &canvas());
+            QTest::qWait(260);
+        }
         for (int i = 1; i <= 8; ++i) {
             auto move = QTest::touchEvent(&canvas(), m_touch);
             for (int f = 0; f < 4; ++f)

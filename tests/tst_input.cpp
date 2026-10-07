@@ -278,14 +278,14 @@ private slots:
     {
         Recorder r;
         InputManager input(r);
-        input.setPixelsPerMm(1.0); // 1 px = 1 mm: fingers 250 mm apart, ten people at the board
+        input.setPixelsPerMm(1.0); // 1 px = 1 mm: fingers 500 mm apart, ten people at the board
         TouchScript t(input);
         for (int id = 0; id < 10; ++id)
-            t.press(id, QPointF(100 + (id % 5) * 250, 100 + (id / 5) * 400));
+            t.press(id, QPointF(100 + (id % 5) * 500, 100 + (id / 5) * 500));
         QCOMPARE(input.touchState(), InputManager::TouchState::MultiDrawing);
         for (int step = 1; step <= 5; ++step)
             for (int id = 0; id < 10; ++id)
-                t.move(id, QPointF(100 + (id % 5) * 250 + step * 10, 100 + (id / 5) * 400 + step * 8));
+                t.move(id, QPointF(100 + (id % 5) * 500 + step * 10, 100 + (id / 5) * 500 + step * 8));
         for (int id = 0; id < 10; ++id)
             t.release(id);
         QVERIFY(r.gestures.isEmpty());
@@ -339,6 +339,77 @@ private slots:
         for (int id = 1; id <= 3; ++id)
             t.release(id);
         QCOMPARE(r.count(PointerPhase::Up), 3);
+    }
+
+    void sloppyPinchStillZooms()
+    {
+        // Real hands: the first finger slides a little and the second lands a quarter second later.
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(2.0);
+        TouchScript t(input);
+        t.press(1, QPointF(400, 300));
+        t.move(1, QPointF(410, 304));
+        t.move(1, QPointF(418, 306)); // 9 mm of drift
+        QTest::qWait(250);
+        t.press(2, QPointF(560, 320)); // 71 mm away: same hand
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        QCOMPARE(r.count(PointerPhase::Cancel), 1); // the drift leaves no ink
+        for (int i = 1; i <= 5; ++i) {
+            t.move(1, QPointF(418, 306 + i * 30));
+            t.move(2, QPointF(560, 320 + i * 30));
+        }
+        QPointF pan;
+        for (const auto& g : r.gestures)
+            if (g.type == GestureType::PanZoom && g.phase == GesturePhase::Update)
+                pan += g.panDelta;
+        QVERIFY(pan.y() > 140); // the board was dragged down
+        t.release(1);
+        t.release(2);
+        QCOMPARE(r.count(PointerPhase::Up), 0);
+    }
+
+    void twoHandZoom()
+    {
+        // One finger of each hand, landing together 35 cm apart: zoom, not two writers.
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0);
+        TouchScript t(input);
+        t.press(1, QPointF(300, 400));
+        t.press(2, QPointF(650, 400));
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        t.move(1, QPointF(200, 400));
+        t.move(2, QPointF(750, 400));
+        qreal scale = 1.0;
+        for (const auto& g : r.gestures)
+            if (g.type == GestureType::PanZoom && g.phase == GesturePhase::Update)
+                scale *= g.scaleDelta;
+        QVERIFY(scale > 1.4);
+        t.release(1);
+        t.release(2);
+        QCOMPARE(r.count(PointerPhase::Up), 0);
+    }
+
+    void restingFingerDoesNotBlockZoom()
+    {
+        // A finger resting on the board (or a ghost touch) must not stop the teacher zooming.
+        Recorder r;
+        InputManager input(r);
+        input.setPixelsPerMm(1.0);
+        TouchScript t(input);
+        t.press(9, QPointF(1200, 700)); // resting, never moves
+        QTest::qWait(400);
+        t.press(1, QPointF(300, 300));
+        QTest::qWait(100);
+        t.press(2, QPointF(380, 300));
+        QCOMPARE(input.touchState(), InputManager::TouchState::PanZoom);
+        t.move(2, QPointF(460, 300));
+        QVERIFY(r.gestures.last().scaleDelta > 1.0);
+        for (int id : {1, 2, 9})
+            t.release(id);
+        QCOMPARE(r.count(PointerPhase::Up), 0); // neither the resting finger nor the pinch drew
+        QCOMPARE(input.touchState(), InputManager::TouchState::Idle);
     }
 
     void fingersLandingWhileZoomingWait()
@@ -464,7 +535,8 @@ private slots:
         InputManager input(r);
         TouchScript t(input);
         t.press(1, QPointF(100, 100));
-        t.move(1, QPointF(200, 100)); // moved 100 px (well past 7 mm): established
+        t.move(1, QPointF(200, 100)); // moved 26 mm ...
+        QTest::qWait(400);             // ... and is no longer just starting: established
         t.press(2, QPointF(700, 500));
         t.press(3, QPointF(760, 520));
         t.move(2, QPointF(720, 540));

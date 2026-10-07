@@ -26,8 +26,8 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 | Action | Touch | Pen | Mouse |
 |---|---|---|---|
 | Draw / use tool | one finger (every finger on its own: up to 10 at once) | pen tip | left button |
-| Pan | two fingers of one hand | – | right or middle drag, Shift + wheel |
-| Zoom | pinch (two fingers of one hand) | – | wheel |
+| Pan | two fingers (one hand, or one finger of each hand) | – | right or middle drag, Shift + wheel |
+| Zoom | pinch (one hand, or one finger of each hand) | – | wheel |
 | Erase | three fingers held together or flat hand, wipe | pen eraser end | – |
 
 * **Wipe (palm erase)**: put three fingers down side by side, touching or nearly touching, and
@@ -40,10 +40,12 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 * **Ten-point touch:** every finger that touches the board on its own writes its own line, so
   several students can write at the same time (as many fingers as the board reports,
   usually 10 or 20).
-* **Zoom and pan** with two fingers of one hand (closer than about 16 cm). The second finger
-  must land while the first one's line has only just started; that line is then removed.
-  Zooming only starts when nobody else is writing, so other people's lines are never bent,
-  and fingers that touch somewhere else while you zoom wait until you are done.
+* **Zoom and pan** with two fingers: two fingers of one hand (closer than about 16 cm), or
+  one finger of each hand put down at the same moment (up to about 45 cm apart). The second
+  finger may come up to a third of a second after the first, and the first may already have
+  slid a little; the start of its line is removed. Zooming does not start while somebody is
+  really writing (their line would bend), but a finger just resting on the board does not
+  stop it. Fingers that touch somewhere else while you zoom wait until you are done.
 * **Every finger draws** (Settings): turns two-finger zoom off, so fingers close together
   draw too. Useful with young pupils who zoom by accident.
 

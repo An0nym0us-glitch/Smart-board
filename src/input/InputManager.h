@@ -34,10 +34,10 @@ public:
 /// Ten-point touch. Every contact is tracked by its own touch id and given one role:
 ///  * write    -> every finger on its own draws with the active tool, independently of the
 ///                others (as many fingers as the panel reports, typically 10 or 20)
-///  * gesture  -> a second finger of the same hand (within kPinchMaxSpanMm) landing while the
-///                first finger's line has only just started, and nobody else is writing:
-///                that line is cancelled and the two fingers pan / zoom; further fingers of
-///                that hand join it
+///  * gesture  -> a second finger landing while the first finger's line has only just started
+///                and nobody is really writing: two fingers of one hand (within kPinchMaxSpanMm),
+///                or one finger of each hand landing almost together. That line is cancelled
+///                and the fingers pan / zoom; further fingers near the gesture join it
 ///  * palm     -> three fingers held tightly together (see PalmGesture.h), or one very large
 ///                contact: the wipe eraser; its fingers never draw, others keep writing
 ///  * ignored  -> fingers left over from a gesture, other fingers of the wiping hand, fingers

@@ -390,10 +390,29 @@ void CanvasWidget::resizeEvent(QResizeEvent* event)
 void CanvasWidget::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
-    if (QScreen* s = screen()) {
-        const qreal ppm = s->physicalDotsPerInch() / 25.4 / std::max(1.0, devicePixelRatioF());
-        m_input.setPixelsPerMm(ppm);
+    updatePixelsPerMm();
+    if (QWindow* w = window()->windowHandle()) {
+        connect(w, &QWindow::screenChanged, this, &CanvasWidget::updatePixelsPerMm, Qt::UniqueConnection);
     }
+}
+
+qreal CanvasWidget::pixelsPerMm(const QSize& logicalSize, const QSizeF& physicalSizeMm)
+{
+    // Touch coordinates are in device independent (logical) pixels, and so is QScreen's
+    // geometry: the screen's logical width over its physical width is the right density at any
+    // Windows display scaling. Screens without a usable physical size (missing or bogus EDID)
+    // fall back to 96 dpi.
+    constexpr qreal kFallback = 96.0 / 25.4;
+    if (physicalSizeMm.width() < 100.0 || physicalSizeMm.height() < 60.0 || logicalSize.isEmpty())
+        return kFallback;
+    const qreal ppm = 0.5 * (logicalSize.width() / physicalSizeMm.width() + logicalSize.height() / physicalSizeMm.height());
+    return (ppm >= 0.8 && ppm <= 12.0) ? ppm : kFallback;
+}
+
+void CanvasWidget::updatePixelsPerMm()
+{
+    if (QScreen* s = screen())
+        m_input.setPixelsPerMm(pixelsPerMm(s->geometry().size(), s->physicalSize()));
 }
 
 void CanvasWidget::updateOverlay(const QRectF& pageRect)

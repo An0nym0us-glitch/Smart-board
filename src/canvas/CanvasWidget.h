@@ -58,6 +58,8 @@ public:
     void ensureVisible(const QRectF& pageRect);
     /// Page position of the most recent pointer press (used to find the tapped table cell).
     QPointF lastPressPage() const { return m_lastPress; }
+    /// Touch density in logical pixels per millimetre for a screen (used for gesture distances).
+    static qreal pixelsPerMm(const QSize& logicalSize, const QSizeF& physicalSizeMm);
 
     // ToolHost
     Document& document() override { return m_doc; }
@@ -114,6 +116,7 @@ private:
     void finishInteractiveZoom();
     void viewUpdated();
     void commitInstrumentResult(InstrumentResult& result);
+    void updatePixelsPerMm();
 
     const UiContext& m_ui;
     Document& m_doc;

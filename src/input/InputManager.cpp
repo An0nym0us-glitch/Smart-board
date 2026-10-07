@@ -20,13 +20,19 @@ namespace {
 // moved (a finger resting before a pinch), or it started a moment ago and is still short (two
 // fingers of a pinch landing a few frames apart). A line that is really being drawn is never
 // interrupted.
-constexpr qreal kYoungStrokeMm = 7.0;      // moved less than this: always young
-constexpr qint64 kYoungStrokeMs = 120;     // started less than this ago ...
-constexpr qreal kYoungStrokeMaxMm = 20.0;  // ... and moved less than this: young
+// Real hands do not land two fingers in the same instant: the first finger may already slide a
+// little (and IR touch frames jitter by a few millimetres) before the second one arrives.
+constexpr qreal kYoungStrokeMm = 12.0;     // moved less than this: always young
+constexpr qint64 kYoungStrokeMs = 350;     // started less than this ago ...
+constexpr qreal kYoungStrokeMaxMm = 30.0;  // ... and moved less than this: young
 // Ten-point touch: every finger writes on its own. Two fingers of ONE hand (closer than this)
 // zoom and pan instead, while nobody else is writing; fingers further apart are different
 // people writing at the same time.
 constexpr qreal kPinchMaxSpanMm = 160.0;
+// Zooming / dragging with one finger of EACH hand: both fingers land almost together (within
+// this window) and not further apart than this. Two people rarely start in the same instant.
+constexpr qint64 kTwoHandWindowMs = 200;
+constexpr qreal kTwoHandMaxSpanMm = 450.0;
 // While zooming, a finger this close to the gesture centre joins it (three-finger pan).
 constexpr qreal kGestureJoinMm = 160.0;
 // While wiping, other fingers this close to the wipe belong to the same hand and are ignored.
@@ -390,27 +396,30 @@ QVector<int> InputManager::findPalmGroup(int newId, qint64 now) const
 
 int InputManager::findPinchPartner(int newId, qint64 now) const
 {
-    // Two fingers of one hand placed close together zoom and pan, but only while nobody else is
-    // writing (moving the view would bend their lines) and only if the other finger's line has
-    // only just started. Fingers further apart are different people writing.
+    // A second finger turns into pan / zoom together with a finger whose line has only just
+    // started: two fingers of one hand (close together), or one finger of each hand landing
+    // almost at the same moment. Never while somebody is really writing (moving the view would
+    // bend their line). Fingers further apart, or arriving later, are different people writing.
     if (m_multiUser || palmActive() || m_panZoom)
         return -1;
     auto added = m_tracks.constFind(newId);
     if (added == m_tracks.constEnd())
         return -1;
     int partner = -1;
+    qreal best = 0.0;
     for (auto it = m_tracks.constBegin(); it != m_tracks.constEnd(); ++it) {
         if (it.key() == newId || it->role != Role::Write)
             continue;
-        if (partner >= 0)
-            return -1; // two or more people are writing
-        partner = it.key();
+        if (!isYoung(*it, now))
+            return -1; // a line is really being drawn
+        const qreal d = geom::distance(it->pos, added->pos);
+        const bool oneHand = d <= kPinchMaxSpanMm * m_pixelsPerMm;
+        const bool twoHands = d <= kTwoHandMaxSpanMm * m_pixelsPerMm && added->startTime - it->startTime <= kTwoHandWindowMs;
+        if ((oneHand || twoHands) && (partner < 0 || d < best)) {
+            partner = it.key();
+            best = d;
+        }
     }
-    if (partner < 0)
-        return -1;
-    const Track& p = m_tracks[partner];
-    if (!isYoung(p, now) || geom::distance(p.pos, added->pos) > kPinchMaxSpanMm * m_pixelsPerMm)
-        return -1;
     return partner;
 }
 
@@ -536,7 +545,11 @@ void InputManager::classifyNewTouch(int id, qint64 now, Qt::KeyboardModifiers mo
         return; // thumb or palm of the wiping hand
     const int partner = findPinchPartner(id, now);
     if (partner >= 0) {
-        cancelWriting(partner);
+        // Lines that had only just started (the first finger of the gesture, a resting finger)
+        // leave no ink; the view is about to move under them.
+        const QList<int> ids = m_tracks.keys();
+        for (int other : ids)
+            cancelWriting(other);
         m_tracks[partner].role = Role::Gesture;
         m_tracks[id].role = Role::Gesture;
         beginPanZoom();
