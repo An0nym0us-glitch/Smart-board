@@ -1,2 +1,4 @@
 build/
 *.user
+installer/Output/
+installer-output/

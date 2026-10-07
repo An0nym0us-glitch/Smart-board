@@ -48,6 +48,11 @@ ctest --test-dir build --output-on-failure     # unit and integration tests
 [docs/BUILDING.md](docs/BUILDING.md) covers step-by-step Windows instructions, deployment with
 `windeployqt` and building the installer.
 
+**Installing on Windows 10/11:** download `ClassBoard-Setup-<version>-x64.exe` (from a GitHub
+release, or the *ClassBoard-Setup-windows-x64* build artifact) and run it. It installs
+ClassBoard like any other app: Start menu entry, desktop shortcut, `.classboard` files open
+with a double-click, and an uninstaller in Settings → Apps.
+
 ## Documentation
 
 * [User guide](docs/USER_GUIDE.md): gestures, tools and keyboard shortcuts

@@ -23,15 +23,44 @@
    it with `windeployqt`, or configure with `-DCLASSBOARD_DEPLOY_QT=ON`. With that option,
    every build runs `windeployqt` for you.
 
-### Installer and portable ZIP
+### Installer (Setup.exe)
+
+CI builds `ClassBoard-Setup-<version>-x64.exe` on every push (artifact
+**ClassBoard-Setup-windows-x64**). Pushing a tag such as `v1.0.0` also publishes a GitHub
+release with the installer as a direct download. To build it yourself:
+
+1. Create the deployed application folder:
+   ```bat
+   cmake --install build --prefix C:\cb\ClassBoard
+   windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime C:\cb\ClassBoard\bin\ClassBoard.exe
+   ```
+   Copy the Visual C++ runtime DLLs (`msvcp140*.dll`, `vcruntime140*.dll`, `concrt140.dll`
+   from `%VCToolsRedistDir%x64\Microsoft.VC14x.CRT`) into `bin`, and optionally Poppler into
+   `bin\poppler\bin` for PDF import.
+2. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run
+   ```bat
+   iscc /DAppVersion=1.0.0 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
+   ```
+   The installer is written to `installer\Output`.
+
+The installer lets you install for all users (Program Files, needs administrator rights) or
+only for yourself. It adds a Start menu entry, an optional desktop shortcut, opens
+`.classboard` lessons with ClassBoard and has a normal uninstaller (Settings → Apps). Running
+a newer installer updates an existing installation in place. Lessons, settings and autosave
+data stay in the user's profile and are kept when ClassBoard is uninstalled.
+
+The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC"
+the first time: choose **More info → Run anyway**. Signing it needs a code-signing
+certificate.
+
+### Portable ZIP (CPack)
 
 ```bat
 cmake --build build --target package
 ```
 
-CPack always builds a portable ZIP. When NSIS is installed it also builds an installer, which
-registers the `.classboard` file type. The install step runs `windeployqt` on the installed
-executable.
+CPack builds a portable ZIP (and, when NSIS is installed, a basic NSIS installer). The install
+step runs `windeployqt` on the installed executable.
 
 ### Import requirements
 
