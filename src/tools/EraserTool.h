@@ -16,9 +16,13 @@ namespace cb {
 /// An erase "session" lasts while any eraser pointer (or the wipe) is down; all changes of a
 /// session become a single undo step (ReplaceObjectsCommand).
 ///
-/// The wipe erases like the board eraser of a real whiteboard: ink under it is cut away (area
-/// erase) and every other object it touches (shapes, lines, arrows, vectors, equations, text,
-/// graphs, constructions, measurements, tables) is removed using the objects' own hit tests.
+/// The area eraser rubs out exactly what is under it, ink and shapes alike: a shape it touches
+/// is turned into ink of the same colour and width (ShapeObject::toInk) and only the part under
+/// the eraser disappears (one side of a triangle, a gap in a circle). A fill is dropped then.
+///
+/// The wipe erases like the board eraser of a real whiteboard: ink and shapes under it are cut
+/// away like the area eraser, and every other object it touches (equations, text, graphs,
+/// constructions, measurements, tables) is removed using the objects' own hit tests.
 /// Pictures and imported PDF / PowerPoint pages are left alone so a wipe over annotations never
 /// removes the slide underneath.
 class EraserTool final : public Tool
@@ -62,6 +66,7 @@ private:
     void eraseAt(const QPointF& center, qreal radius, Method method);
     void eraseAlong(const QPointF& from, const QPointF& to, qreal radius, Method method);
     bool cutStroke(const ObjectId& id, const QPointF& center, qreal radius);
+    bool cutShape(const ObjectId& id, const QPointF& center, qreal radius);
     void takeOut(const ObjectId& id);
     void commit();
     qreal pageRadius() const;

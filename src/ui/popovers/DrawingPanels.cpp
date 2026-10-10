@@ -144,7 +144,7 @@ EraserPanel::EraserPanel(const AppServices& s, QWidget* parent)
         switch (static_cast<EraserMode>(m)) {
         case EraserMode::Stroke: description->setText(tr("Removes every ink stroke you touch.")); break;
         case EraserMode::Object: description->setText(tr("Removes any object you touch: ink, shapes, text, images.")); break;
-        case EraserMode::Area: description->setText(tr("Rubs out exactly the ink under the eraser.")); break;
+        case EraserMode::Area: description->setText(tr("Rubs out exactly what is under the eraser: ink and shapes, even part of a shape.")); break;
         }
     };
     describe(mode->currentIndex());

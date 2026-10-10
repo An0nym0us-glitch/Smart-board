@@ -199,16 +199,125 @@ private slots:
         threeFingerWipe(560, 320);
         for (const ObjectId& id : wiped)
             QVERIFY2(!page().object(id), "an object under the wipe survived");
-        QCOMPARE(page().objectCount(), total - static_cast<int>(wiped.size()));
+        // Shapes are cut like ink: what lay under the wipe is gone, the rest stays as ink.
+        const QPointF pathMid = (a + b) / 2;
+        for (const auto& o : page().objects()) {
+            if (o->type() == ObjectType::Image)
+                continue;
+            QVERIFY2(!o->hitTest(pathMid, 0.0), "something is left in the middle of the wipe");
+        }
+        int strokes = 0;
+        for (const auto& o : page().objects())
+            strokes += o->type() == ObjectType::Stroke;
+        QVERIFY2(strokes >= 4, "the parts of the shapes outside the wipe should remain");
         QCOMPARE(doc().commands().index(), commandsBefore + 1);
         // Undo brings everything back, redo wipes again.
+        const int afterWipe = page().objectCount();
         doc().commands().undo();
         QCOMPARE(page().objectCount(), total);
         for (const ObjectId& id : wiped)
             QVERIFY(page().object(id));
         doc().commands().redo();
-        QCOMPARE(page().objectCount(), total - static_cast<int>(wiped.size()));
+        QCOMPARE(page().objectCount(), afterWipe);
         doc().commands().undo();
+        m_window->activateTool(ToolId::Pen);
+    }
+
+    // Anything (other than the given ids) drawn at a page point?
+    bool inkAt(const QPointF& pagePos, qreal tolerance = 1.0)
+    {
+        for (const auto& o : page().objects())
+            if (o->hitTest(pagePos, tolerance))
+                return true;
+        return false;
+    }
+
+    void areaEraserCutsPartOfAShape()
+    {
+        clearPage();
+        m_window->toolSettings().setEraserMode(EraserMode::Area);
+        m_window->activateTool(ToolId::Eraser);
+        // A triangle: apex top centre, base along the bottom.
+        const QRectF box(toPage(QPoint(300, 200)), toPage(QPoint(700, 500)));
+        auto tri = ShapeObject::createBox(ShapeKind::Triangle, box, ShapeStyle());
+        const ObjectId id = tri->id();
+        std::vector<ObjectPtr> objs;
+        objs.push_back(std::move(tri));
+        doc().commands().push(std::make_unique<AddObjectsCommand>(page().id(), std::move(objs)));
+        const QPointF baseMid(box.center().x(), box.bottom());
+        const QPointF leftSideMid((box.left() + box.center().x()) / 2, box.center().y());
+        const QPointF rightSideMid((box.right() + box.center().x()) / 2, box.center().y());
+        QVERIFY(inkAt(baseMid) && inkAt(leftSideMid) && inkAt(rightSideMid));
+
+        // Rub out the middle of the base only.
+        const int commandsBefore = doc().commands().index();
+        mouseDrag(QPoint(440, 500), QPoint(560, 500));
+        QVERIFY(!page().object(id));                       // no longer a whole triangle ...
+        QVERIFY(!inkAt(baseMid));                          // ... the base has a gap ...
+        QVERIFY(inkAt(leftSideMid) && inkAt(rightSideMid)); // ... and both sides are still there
+        QVERIFY(inkAt(QPointF(box.left() + 2, box.bottom()))); // as are the ends of the base
+        for (const auto& o : page().objects())
+            QCOMPARE(o->type(), ObjectType::Stroke);
+        QCOMPARE(doc().commands().index(), commandsBefore + 1); // one undo step
+        shot(QStringLiteral("erase-part-of-triangle"));
+
+        // Rub out the whole left side as well: only the right side and the base ends remain.
+        mouseDrag(QPoint(300, 500), QPoint(500, 200), 30);
+        QVERIFY(!inkAt(leftSideMid));
+        QVERIFY(inkAt(rightSideMid));
+
+        // Undo restores the real triangle, redo erases again.
+        doc().commands().undo();
+        doc().commands().undo();
+        QCOMPARE(page().objectCount(), 1);
+        QVERIFY(page().object(id));
+        QCOMPARE(page().object(id)->type(), ObjectType::Shape);
+        doc().commands().redo();
+        QVERIFY(!page().object(id));
+        QVERIFY(!inkAt(baseMid));
+        QVERIFY(inkAt(leftSideMid));
+        m_window->activateTool(ToolId::Pen);
+    }
+
+    void areaEraserCutsCirclesLinesAndArrows()
+    {
+        clearPage();
+        m_window->toolSettings().setEraserMode(EraserMode::Area);
+        m_window->activateTool(ToolId::Eraser);
+        ShapeStyle style;
+        style.fill = QColor(0, 120, 255, 80); // filled: the fill goes, the outline is cut
+        auto circle = ShapeObject::createBox(ShapeKind::Circle, QRectF(toPage(QPoint(150, 150)), toPage(QPoint(350, 350))), style);
+        const QRectF cb = circle->sceneBounds();
+        auto arrow = ShapeObject::createLine(ShapeKind::Arrow, toPage(QPoint(420, 250)), toPage(QPoint(720, 250)), ShapeStyle());
+        std::vector<ObjectPtr> objs;
+        objs.push_back(std::move(circle));
+        objs.push_back(std::move(arrow));
+        doc().commands().push(std::make_unique<AddObjectsCommand>(page().id(), std::move(objs)));
+        // A gap at the top of the circle and in the middle of the arrow's shaft.
+        mouseDrag(QPoint(230, 150), QPoint(270, 150), 6);
+        mouseDrag(QPoint(560, 230), QPoint(560, 270), 6);
+        QVERIFY(!inkAt(toPage(QPoint(250, 150))));
+        QVERIFY(inkAt(toPage(QPoint(250, 350)), 3.0)); // bottom of the circle stays
+        QVERIFY(inkAt(toPage(QPoint(150, 250)), 3.0)); // and its sides
+        QVERIFY(!inkAt(toPage(QPoint(560, 250))));
+        QVERIFY(inkAt(toPage(QPoint(470, 250))));      // both halves of the shaft
+        QVERIFY(inkAt(toPage(QPoint(650, 250))));
+        QVERIFY(inkAt(toPage(QPoint(716, 250))));      // and the arrowhead
+        QVERIFY(!inkAt(cb.center()));                  // the fill is gone
+        int shapes = 0;
+        for (const auto& o : page().objects())
+            shapes += o->type() == ObjectType::Shape;
+        QCOMPARE(shapes, 1); // only the arrowhead is a (small, filled) shape
+        // Object mode still removes a whole shape in one tap.
+        clearPage();
+        auto rect = ShapeObject::createBox(ShapeKind::Rectangle, QRectF(toPage(QPoint(300, 200)), toPage(QPoint(600, 400))), ShapeStyle());
+        objs.clear();
+        objs.push_back(std::move(rect));
+        doc().commands().push(std::make_unique<AddObjectsCommand>(page().id(), std::move(objs)));
+        m_window->toolSettings().setEraserMode(EraserMode::Object);
+        QTest::mouseClick(&canvas(), Qt::LeftButton, Qt::NoModifier, QPoint(300, 300));
+        QCOMPARE(page().objectCount(), 0);
+        m_window->toolSettings().setEraserMode(EraserMode::Area);
         m_window->activateTool(ToolId::Pen);
     }
 

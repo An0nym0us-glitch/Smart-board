@@ -87,6 +87,47 @@ private slots:
         QVERIFY(hollow->hitTest(QPointF(0, 50), 2));
     }
 
+    void shapeToInk()
+    {
+        // A rotated, dashed rectangle becomes one closed stroke along its outline.
+        ShapeStyle style;
+        style.stroke = QColor(255, 0, 0);
+        style.width = 6;
+        style.dashed = true;
+        auto rect = ShapeObject::createBox(ShapeKind::Rectangle, QRectF(100, 100, 200, 100), style);
+        rect->setRotation(30);
+        auto ink = rect->toInk();
+        QCOMPARE(int(ink.size()), 1);
+        QCOMPARE(ink[0]->type(), ObjectType::Stroke);
+        auto* s = static_cast<StrokeObject*>(ink[0].get());
+        QCOMPARE(s->ink().color, style.stroke);
+        QCOMPARE(s->ink().width, 6.0);
+        QCOMPARE(s->ink().style, StrokeStyle::Dashed);
+        QVERIFY(!s->ink().pressure);
+        // The ink lies exactly on the rotated outline (corners included) and is closed.
+        for (const QPointF& corner : {QPointF(-100, -50), QPointF(100, -50), QPointF(100, 50), QPointF(-100, 50)}) {
+            const QPointF page = rect->mapToPage(corner);
+            QVERIFY(s->hitTest(page, 0.5));
+        }
+        QVERIFY(!s->hitTest(rect->mapToPage(QPointF(0, 0)), 0.5)); // hollow
+        // An arrow: a straight shaft plus a filled head.
+        auto arrow = ShapeObject::createLine(ShapeKind::Arrow, QPointF(0, 0), QPointF(300, 0), ShapeStyle());
+        ink = arrow->toInk();
+        QCOMPARE(int(ink.size()), 2);
+        QCOMPARE(ink[0]->type(), ObjectType::Stroke);
+        QCOMPARE(ink[1]->type(), ObjectType::Shape);
+        QVERIFY(ink[0]->hitTest(QPointF(150, 0), 0.5));
+        QVERIFY(ink[1]->hitTest(QPointF(299, 0), 0.5));
+        // A circle keeps its round shape.
+        auto circle = ShapeObject::createBox(ShapeKind::Circle, QRectF(0, 0, 200, 200), ShapeStyle());
+        ink = circle->toInk();
+        QCOMPARE(int(ink.size()), 1);
+        for (int deg = 0; deg < 360; deg += 30) {
+            const qreal r = qDegreesToRadians(qreal(deg));
+            QVERIFY(ink[0]->hitTest(QPointF(100 + 100 * std::cos(r), 100 + 100 * std::sin(r)), 1.0));
+        }
+    }
+
     void textWrapsAndScales()
     {
         TextFormat f;

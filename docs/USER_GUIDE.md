@@ -60,7 +60,10 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
   Undo / Redo ignore them. It works with the pen, a finger and the mouse. Choosing another
   pen style switches back to normal ink.
 * **Eraser.** *Stroke* removes whole lines, *Object* removes anything you touch, and *Area*
-  rubs out exactly the ink under the eraser. *Clear page* asks for confirmation first, and you
+  rubs out exactly what is under the eraser: ink and shapes alike. Rub over one side of a
+  triangle and only that side (or the part you touched) disappears; a circle gets a gap. A
+  shape that has been partly erased becomes ink of the same colour and thickness (its fill
+  is removed). Undo brings the whole shape back. *Clear page* asks for confirmation first, and you
   can undo it.
 * **Select.** Tap an object (inside an empty rectangle or circle works too), drag a rectangle,
   or draw a lasso. Drag a selected object to move it. Corner handles

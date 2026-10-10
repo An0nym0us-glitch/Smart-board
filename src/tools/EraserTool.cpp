@@ -3,6 +3,7 @@
 #include "canvas/ViewTransform.h"
 #include "core/Geometry.h"
 #include "document/Document.h"
+#include "document/ShapeObject.h"
 #include "document/StrokeObject.h"
 #include "ui/Theme.h"
 
@@ -83,6 +84,42 @@ bool EraserTool::cutStroke(const ObjectId& id, const QPointF& center, qreal radi
     return true;
 }
 
+bool EraserTool::cutShape(const ObjectId& id, const QPointF& center, qreal radius)
+{
+    Page* page = host().page();
+    const auto* shape = static_cast<const ShapeObject*>(page->object(id));
+    if (!shape->hitTest(center, radius))
+        return false;
+    // A shape smaller than the eraser (an arrowhead, a dot) simply goes.
+    const QRectF b = shape->sceneBounds();
+    if (std::max(b.width(), b.height()) <= 2.0 * radius) {
+        takeOut(id);
+        return true;
+    }
+    // Otherwise it becomes ink in the same colour and width, and the part under the eraser is
+    // rubbed out like any other ink: a triangle loses one side, a circle gets a gap.
+    auto pieces = shape->toInk();
+    const int index = page->indexOf(id);
+    takeOut(id);
+    std::vector<ObjectId> ids;
+    int insertAt = index;
+    for (auto& piece : pieces) {
+        ids.push_back(piece->id());
+        m_session.created.insert(piece->id());
+        host().document().insertObject(m_session.page, insertAt++, std::move(piece));
+    }
+    for (const ObjectId& pid : ids) {
+        DocumentObject* o = page->object(pid);
+        if (!o)
+            continue;
+        if (o->type() == ObjectType::Stroke)
+            cutStroke(pid, center, radius);
+        else if (o->hitTest(center, radius))
+            takeOut(pid); // arrowhead under the eraser
+    }
+    return true;
+}
+
 void EraserTool::eraseAt(const QPointF& center, qreal radius, Method method)
 {
     if (!m_session.active)
@@ -104,6 +141,8 @@ void EraserTool::eraseAt(const QPointF& center, qreal radius, Method method)
         case Method::Area:
             if (o->type() == ObjectType::Stroke)
                 cutStroke(id, center, radius);
+            else if (o->type() == ObjectType::Shape)
+                cutShape(id, center, radius);
             break;
         case Method::Stroke:
             if (o->type() == ObjectType::Stroke && o->hitTest(center, radius))
@@ -116,6 +155,8 @@ void EraserTool::eraseAt(const QPointF& center, qreal radius, Method method)
         case Method::Wipe:
             if (o->type() == ObjectType::Stroke)
                 cutStroke(id, center, radius);
+            else if (o->type() == ObjectType::Shape)
+                cutShape(id, center, radius);
             else if (o->type() != ObjectType::Image && o->hitTest(center, radius))
                 takeOut(id);
             break;

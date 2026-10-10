@@ -2,6 +2,7 @@
 
 #include "core/Geometry.h"
 #include "core/JsonUtil.h"
+#include "document/StrokeObject.h"
 
 #include <QCoreApplication>
 #include <QPainter>
@@ -210,11 +211,11 @@ qreal ShapeObject::outlineMargin() const
     return m_style.width / 2 + head + 2.0;
 }
 
-void ShapeObject::paintArrow(QPainter& painter, const QPointF& a, const QPointF& b, const QPen& pen, bool startHead,
-                             bool endHead)
+void ShapeObject::arrowGeometry(const QPointF& a, const QPointF& b, qreal penWidth, bool startHead, bool endHead,
+                                QLineF* shaft, QVector<QPolygonF>* heads)
 {
     const qreal len = geom::distance(a, b);
-    const qreal head = std::min(len * 0.3, std::max(8.0, pen.widthF() * 3.5));
+    const qreal head = std::min(len * 0.3, std::max(8.0, penWidth * 3.5));
     const QPointF dir = len > 1e-6 ? (b - a) / len : QPointF(1, 0);
     const QPointF n = geom::perpendicular(dir);
     QPointF from = a;
@@ -223,23 +224,93 @@ void ShapeObject::paintArrow(QPainter& painter, const QPointF& a, const QPointF&
         from = a + dir * head * 0.8;
     if (endHead)
         to = b - dir * head * 0.8;
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawLine(from, to);
-    auto drawHead = [&](const QPointF& tip, const QPointF& d) {
+    if (shaft)
+        *shaft = QLineF(from, to);
+    if (!heads)
+        return;
+    auto makeHead = [&](const QPointF& tip, const QPointF& d) {
         QPolygonF tri;
         tri << tip << tip - d * head + n * head * 0.5 << tip - d * head - n * head * 0.5;
-        QPen headPen = pen;
-        headPen.setStyle(Qt::SolidLine);
-        headPen.setJoinStyle(Qt::RoundJoin);
-        painter.setPen(headPen);
-        painter.setBrush(pen.color());
-        painter.drawPolygon(tri);
+        heads->push_back(tri);
     };
     if (endHead)
-        drawHead(b, dir);
+        makeHead(b, dir);
     if (startHead)
-        drawHead(a, -dir);
+        makeHead(a, -dir);
+}
+
+void ShapeObject::paintArrow(QPainter& painter, const QPointF& a, const QPointF& b, const QPen& pen, bool startHead,
+                             bool endHead)
+{
+    QLineF shaft;
+    QVector<QPolygonF> heads;
+    arrowGeometry(a, b, pen.widthF(), startHead, endHead, &shaft, &heads);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(shaft);
+    QPen headPen = pen;
+    headPen.setStyle(Qt::SolidLine);
+    headPen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(headPen);
+    painter.setBrush(pen.color());
+    for (const QPolygonF& tri : heads)
+        painter.drawPolygon(tri);
+}
+
+namespace {
+// Straight pieces become strokes with points every couple of units: ink is drawn as a smooth
+// curve through its points, so dense points keep sides straight and corners sharp.
+QVector<StrokePoint> densified(const QPolygonF& polyline, qreal step)
+{
+    QVector<StrokePoint> out;
+    for (int i = 0; i < polyline.size(); ++i) {
+        if (i > 0) {
+            const QPointF a = polyline[i - 1];
+            const QPointF b = polyline[i];
+            const int n = std::max(1, static_cast<int>(std::ceil(geom::distance(a, b) / step)));
+            for (int k = 1; k < n; ++k)
+                out.push_back({geom::lerp(a, b, double(k) / n), 1.0f});
+        }
+        out.push_back({polyline[i], 1.0f});
+    }
+    return out;
+}
+} // namespace
+
+std::vector<std::unique_ptr<DocumentObject>> ShapeObject::toInk() const
+{
+    std::vector<std::unique_ptr<DocumentObject>> out;
+    InkStyle ink;
+    ink.color = m_style.stroke;
+    ink.width = m_style.width;
+    ink.style = m_style.dashed ? StrokeStyle::Dashed : StrokeStyle::Pen;
+    ink.pressure = false;
+    const qreal step = 2.0;
+    auto addStroke = [&](const QPolygonF& polyline) {
+        if (polyline.size() >= 2)
+            out.push_back(StrokeObject::fromPagePoints(densified(polyline, step), ink));
+    };
+    const QTransform t = transform();
+    if (isLineShape(m_kind)) {
+        QLineF shaft;
+        QVector<QPolygonF> heads;
+        arrowGeometry(m_p1, m_p2, m_style.width, m_kind == ShapeKind::DoubleArrow,
+                      m_kind == ShapeKind::Arrow || m_kind == ShapeKind::DoubleArrow, &shaft, &heads);
+        QPolygonF line;
+        line << t.map(shaft.p1()) << t.map(shaft.p2());
+        addStroke(line);
+        ShapeStyle headStyle = m_style;
+        headStyle.dashed = false;
+        headStyle.fill = m_style.stroke;
+        for (const QPolygonF& head : heads)
+            out.push_back(createPolygon(t.map(head), headStyle));
+        return out;
+    }
+    if (m_style.stroke.alpha() == 0 || m_style.width <= 0.0)
+        return out; // a fill without an outline has no lines to keep
+    for (const QPolygonF& polyline : outline().toSubpathPolygons(t))
+        addStroke(polyline);
+    return out;
 }
 
 void ShapeObject::paint(QPainter& painter, const RenderContext& ctx) const

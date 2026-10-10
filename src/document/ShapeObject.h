@@ -71,9 +71,17 @@ public:
     QColor color() const override { return m_style.stroke; }
     std::unique_ptr<DocumentObject> clone() const override;
 
+    /// The shape as freehand ink in page coordinates, so the area eraser can rub out part of it:
+    /// its outline (or line) as straight strokes with the same colour, width and dash style,
+    /// plus filled arrowheads as small filled polygons. A fill is not carried over.
+    std::vector<std::unique_ptr<DocumentObject>> toInk() const;
+
     /// Paints a line/arrow between two points (used for previews and vectors).
     static void paintArrow(QPainter& painter, const QPointF& a, const QPointF& b, const QPen& pen, bool startHead,
                            bool endHead);
+    /// Geometry of paintArrow: the shaft end points and the arrowhead triangles.
+    static void arrowGeometry(const QPointF& a, const QPointF& b, qreal penWidth, bool startHead, bool endHead,
+                              QLineF* shaft, QVector<QPolygonF>* heads);
 
 protected:
     bool hitTestLocal(const QPointF& local, qreal tolerance) const override;
