@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 
+# The single source of the version: the app's About text, ClassBoard.exe's file properties and
+# the installer name (ClassBoard-Setup-<version>-x64.exe) all come from here. A release is
+# tagged v<version>; the release workflow refuses a tag that does not match.
 project(ClassBoard
-    VERSION 1.0.0
+    VERSION 0.2.2
     DESCRIPTION "Digital classroom whiteboard for interactive displays"
     HOMEPAGE_URL "https://github.com/An0nym0us-glitch/Smart-board22"
     LANGUAGES CXX)

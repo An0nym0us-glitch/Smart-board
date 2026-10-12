@@ -26,8 +26,9 @@
 ### Installer (Setup.exe)
 
 CI builds `ClassBoard-Setup-<version>-x64.exe` on every push (artifact
-**ClassBoard-Setup-windows-x64**). Pushing a tag such as `v1.0.0` also publishes a GitHub
-release with the installer as a direct download. To build it yourself:
+**ClassBoard-Setup-windows-x64**). The version comes from `project(ClassBoard VERSION x.y.z)`
+in `CMakeLists.txt`, the single place it is set: the app, `ClassBoard.exe`'s file properties
+and the installer name all use it. To build the installer yourself:
 
 1. Create the deployed application folder:
    ```bat
@@ -39,7 +40,7 @@ release with the installer as a direct download. To build it yourself:
    `bin\poppler\bin` for PDF import.
 2. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run
    ```bat
-   iscc /DAppVersion=1.0.0 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
+   iscc /DAppVersion=0.2.2 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
    ```
    The installer is written to `installer\Output`.
 
@@ -52,6 +53,29 @@ data stay in the user's profile and are kept when ClassBoard is uninstalled.
 The installer is not code-signed, so Windows SmartScreen may show "Windows protected your PC"
 the first time: choose **More info → Run anyway**. Signing it needs a code-signing
 certificate.
+
+### Publishing a release
+
+Releases are made by `.github/workflows/release.yml`. GitHub releases are immutable once
+published (no assets can be added afterwards), so the workflow builds and tests, uploads the
+installer to a **draft** release, checks the upload and only then publishes it. Never create
+the release on github.com yourself: that publishes it (and its tag) before the installer
+exists, and the installer can then never be attached.
+
+1. Set the new version in `CMakeLists.txt` (`project(ClassBoard VERSION 0.2.2 ...)`), commit
+   and push it. Use a version that has no release or tag yet.
+2. Start the release, either
+   * on github.com: **Actions → Release → Run workflow**, enter the same version (`0.2.2`),
+     optionally a title (giving "ClassBoard v0.2.2 — <title>") and whether it is a
+     pre-release; the workflow creates the tag `v0.2.2` when it publishes; or
+   * from git: `git tag v0.2.2 && git push origin v0.2.2`.
+3. The release appears with `ClassBoard-Setup-0.2.2-x64.exe` once the run is green. You can
+   edit its notes afterwards; its assets are fixed.
+
+The workflow refuses, before building, a version that does not match `CMakeLists.txt`, a
+version that already has a release (published or draft), and, for the manual trigger, a tag
+that already exists. If a run fails after creating the draft, the draft is left unpublished:
+delete it on the Releases page, fix the problem and run the release again.
 
 ### Portable ZIP (CPack)
 

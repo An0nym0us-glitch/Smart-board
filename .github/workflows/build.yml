@@ -1,16 +1,23 @@
 name: Build and test
 
+# Continuous integration for every branch push and pull request. Releases are made by
+# release.yml, which reuses this workflow (workflow_call) to build and test the installer
+# before it creates the release. This workflow never creates or edits releases, and tag
+# pushes are left to release.yml so a tag is not built twice.
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   windows:
     name: Windows (MSVC, Qt 5.15)
     runs-on: windows-2022
-    permissions:
-      contents: write # attach the installer to a GitHub release when a v* tag is pushed
     steps:
       - uses: actions/checkout@v4
 
@@ -80,6 +87,8 @@ jobs:
           $version = (Select-String -Path CMakeLists.txt -Pattern '^\s+VERSION\s+(\d+\.\d+\.\d+)').Matches[0].Groups[1].Value
           & $iscc "/DAppVersion=$version" "/DSourceDir=${{ github.workspace }}\ClassBoard" "/O${{ github.workspace }}\installer-output" installer\ClassBoard.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          $expected = "installer-output\ClassBoard-Setup-$version-x64.exe"
+          if (-not (Test-Path $expected)) { throw "Expected installer $expected was not produced" }
           Get-ChildItem installer-output
 
       - name: Upload installer
@@ -94,12 +103,6 @@ jobs:
           name: ClassBoard-windows-x64
           path: ClassBoard
 
-      # Pushing a tag such as v1.0.0 publishes a release with the installer as a direct download.
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: installer-output/*.exe
 
   linux:
     name: Linux (GCC, Qt 5.15)

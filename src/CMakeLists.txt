@@ -118,7 +118,10 @@ endif()
 # Application
 set(CLASSBOARD_APP_SOURCES app/main.cpp)
 if(WIN32)
-    list(APPEND CLASSBOARD_APP_SOURCES ${PROJECT_SOURCE_DIR}/resources/app/classboard.rc)
+    # Windows file properties (version, icon) generated from the project version.
+    set(CLASSBOARD_ICON_FILE "${PROJECT_SOURCE_DIR}/resources/app/classboard.ico")
+    configure_file(${PROJECT_SOURCE_DIR}/resources/app/classboard.rc.in ${CMAKE_CURRENT_BINARY_DIR}/classboard.rc @ONLY)
+    list(APPEND CLASSBOARD_APP_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/classboard.rc)
 endif()
 
 add_executable(ClassBoard WIN32 ${CLASSBOARD_APP_SOURCES})

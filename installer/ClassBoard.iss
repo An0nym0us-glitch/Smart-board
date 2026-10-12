@@ -1,12 +1,14 @@
 ; Windows installer for ClassBoard (Inno Setup 6).
 ;
 ; Build the deployed application folder first (see docs/BUILDING.md), then:
-;   iscc /DAppVersion=1.0.0 /DSourceDir=C:\path\to\ClassBoard installer\ClassBoard.iss
-; SourceDir is the folder produced by "cmake --install" + windeployqt; it must contain
-; bin\ClassBoard.exe. The installer is written to installer\Output unless /O is given.
+;   iscc /DAppVersion=<x.y.z> /DSourceDir=C:\path\to\ClassBoard installer\ClassBoard.iss
+; AppVersion must be the project version from CMakeLists.txt (project(... VERSION x.y.z)), so
+; the installer, the app and the release tag v<x.y.z> agree. SourceDir is the folder produced
+; by "cmake --install" + windeployqt; it must contain bin\ClassBoard.exe. The installer is
+; written to installer\Output unless /O is given.
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #error Pass the version from CMakeLists.txt: iscc /DAppVersion=x.y.z ...
 #endif
 #ifndef SourceDir
   #define SourceDir "..\ClassBoard"
