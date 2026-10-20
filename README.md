@@ -55,7 +55,8 @@ with a double-click, and an uninstaller in Settings → Apps.
 
 ## Documentation
 
-* [How to use ClassBoard (PDF)](docs/ClassBoard-User-Guide.pdf): illustrated guide for teachers and students, printable
+* [How to use ClassBoard (PDF)](docs/ClassBoard-User-Guide.pdf): illustrated guide for teachers and students
+  ([compact 7-page version](docs/ClassBoard-User-Guide-compact.pdf) for printing)
 * [User guide](docs/USER_GUIDE.md): gestures, tools and keyboard shortcuts
 * [Architecture](docs/ARCHITECTURE.md): modules, data flow and design decisions
 * [File format](docs/FILE_FORMAT.md): the `.classboard` container and its JSON schema
