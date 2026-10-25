@@ -64,6 +64,8 @@ exists, and the installer can then never be attached.
 
 1. Set the new version in `CMakeLists.txt` (`project(ClassBoard VERSION 0.3.0 ...)`), commit
    and push it. Use a version that has no release or tag yet.
+   To describe the release, add `.github/release-notes/v0.3.0.md` in the same push: it is shown
+   above the automatically generated list of changes.
 2. Start the release, either
    * on github.com: **Actions → Release → Run workflow**, enter the same version (`0.3.0`),
      optionally a title (giving "ClassBoard v0.3.0 — <title>") and whether it is a

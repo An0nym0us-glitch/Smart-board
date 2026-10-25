@@ -105,6 +105,11 @@ jobs:
       SUBTITLE: ${{ inputs.title }}
       PRERELEASE: ${{ inputs.prerelease && 'true' || 'false' }}
     steps:
+      # Only the hand-written release notes are needed from the repository.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/release-notes
+
       - name: Download the installer built and tested above
         uses: actions/download-artifact@v4
         with:
@@ -132,7 +137,11 @@ jobs:
           title="ClassBoard $TAG"
           if [ -n "$SUBTITLE" ]; then title="$title — $SUBTITLE"; fi
           flags=(--draft --target "$GITHUB_SHA" --title "$title" --generate-notes)
-          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          # .github/release-notes/v<version>.md, if present, describes the release above the
+          # generated list of changes.
+          notes=".github/release-notes/$TAG.md"
+          if [ -f "$notes" ]; then flags+=(--notes-file "$notes"); else echo "No $notes; using generated notes only"; fi
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); else flags+=(--latest); fi
           gh release create "$TAG" "dist/$ASSET" --repo "$GITHUB_REPOSITORY" "${flags[@]}"
 
       - name: Verify the upload, then publish
