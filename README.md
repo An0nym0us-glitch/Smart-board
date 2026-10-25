@@ -20,6 +20,7 @@ rest open as popovers attached to the button that opened them, so you stay on th
 | **Geometry** | Distance, angle, slope and area measurements that update live. Points with coordinates, segments, lines, rays and vectors. Snapping to points and to the grid. |
 | **Precision** | Exact values next to dragging: line length, direction, angle, rise / run / slope, vector magnitude and direction, shape width / height with area and perimeter. A drawing scale such as 10 cm = 1 km shows real lengths, areas and vectors. |
 | **Equations** | LaTeX-style input with a symbol palette and a live preview. Supports fractions, roots, powers and indices, integrals, sums, limits, vectors, matrices, cases and Greek letters. Equations stay editable. The optional ✨ Magic Equation Maker turns selected handwriting into an equation after the teacher accepts a preview (offline). |
+| **Calculator** | A classroom calculator with big touch keys: arithmetic, powers, roots, trigonometry in degrees or radians, logarithms, factorial, percent and Ans, with a live result and recent calculations. *Put on board* writes the calculation and its result on the page as an equation. |
 | **Graphs** | Plot several functions with automatic parameter sliders (a, b, c …), zoom and pan, points that snap onto curves, vectors and value tables. |
 | **Pages** | Page menu with New, Duplicate, Clear and Delete page. Page navigator with thumbnails; drag to reorder, rename. Page sizes 16:9, 4:3, A4, A3 or custom; background colour per page. Templates: blackboard, whiteboard, grid, dots, ruled, graph paper, music staves, coordinate plane, or your own image. |
 | **View** | Zoom 25 %–250 % presets, zoom in / out, 100 %, fit page, fit width, full screen. Zoom never changes sizes, measurements or exports. |
@@ -50,13 +51,13 @@ ctest --test-dir build --output-on-failure     # unit and integration tests
 
 **Installing on Windows 10/11:** download `ClassBoard-Setup-<version>-x64.exe` (from a GitHub
 release, or the *ClassBoard-Setup-windows-x64* build artifact) and run it. It installs
-ClassBoard like any other app: Start menu entry, desktop shortcut, `.classboard` files open
+ClassBoard like any other app: Start menu entry (plus the PDF user guide), desktop shortcut, `.classboard` files open
 with a double-click, and an uninstaller in Settings → Apps.
 
 ## Documentation
 
 * [How to use ClassBoard (PDF)](docs/ClassBoard-User-Guide.pdf): illustrated guide for teachers and students
-  ([compact 7-page version](docs/ClassBoard-User-Guide-compact.pdf) for printing)
+  ([compact 9-page version](docs/ClassBoard-User-Guide-compact.pdf) for printing)
 * [User guide](docs/USER_GUIDE.md): gestures, tools and keyboard shortcuts
 * [Architecture](docs/ARCHITECTURE.md): modules, data flow and design decisions
 * [File format](docs/FILE_FORMAT.md): the `.classboard` container and its JSON schema

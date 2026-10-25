@@ -112,6 +112,7 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
     m_exporter = std::make_unique<ExportController>(*m_doc, m_settings, *m_toast, this);
     m_popovers = std::make_unique<PopoverController>(*m_popoverHost);
     m_cellEditor = std::make_unique<TableCellEditor>(ui, *m_canvas, *m_doc);
+    m_calculator = std::make_unique<math::Calculator>();
     m_services.reset(new AppServices{ui,
                                      *m_doc,
                                      *m_tools,
@@ -125,6 +126,7 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
                                      *m_toast,
                                      *m_popovers,
                                      *m_recognizers,
+                                     *m_calculator,
                                      [this](ToolId id) { activateTool(id); },
                                      [this](qreal scale) { applyUiScale(scale); }});
     m_popovers->setServices(m_services.get());

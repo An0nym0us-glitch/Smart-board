@@ -3,7 +3,11 @@
 install(FILES
     "${PROJECT_SOURCE_DIR}/README.md"
     "${PROJECT_SOURCE_DIR}/LICENSE"
+    "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+    "${PROJECT_SOURCE_DIR}/docs/ClassBoard-User-Guide.pdf"
     DESTINATION doc)
+# Full texts of the licences named in THIRD_PARTY_NOTICES.md (Qt: LGPL 3, Poppler: GPL).
+install(DIRECTORY "${PROJECT_SOURCE_DIR}/licenses/" DESTINATION doc/licenses)
 
 # Optional: ship Poppler's command line tools (pdftoppm + DLLs) for offline PDF import.
 set(CLASSBOARD_POPPLER_DIR "" CACHE PATH "Folder containing pdftoppm and its libraries, installed as bin/poppler/bin")

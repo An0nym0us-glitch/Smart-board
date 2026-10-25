@@ -65,6 +65,7 @@ MorePanel::MorePanel(const AppServices& s, QWidget* parent)
          layer.isShown(Instrument::Kind::SetSquare)},
         {QStringLiteral("compass"), tr("Compass"), instrument(Instrument::Kind::Compass), layer.isShown(Instrument::Kind::Compass)},
         {QStringLiteral("measure-distance"), tr("Measurements"), push("measure")},
+        {QStringLiteral("calculator"), tr("Calculator"), push("calculator")},
         {QStringLiteral("image"), tr("Images"),
          [sp]() {
              sp->popovers.close();
@@ -480,7 +481,8 @@ SettingsPanel::SettingsPanel(const AppServices& s, QWidget* parent)
     layout->addWidget(panel::section(ui, tr("About"), this));
     layout->addWidget(panel::hint(ui,
                                   tr("ClassBoard %1 — open-source digital classroom board. Works fully offline. "
-                                     "Licensed under the MIT License.")
+                                     "Licensed under the MIT License. Includes Qt (LGPL 3) and Poppler (GPL); "
+                                     "see doc\\THIRD_PARTY_NOTICES.md in the installation folder.")
                                       .arg(QCoreApplication::applicationVersion()),
                                   this));
 }

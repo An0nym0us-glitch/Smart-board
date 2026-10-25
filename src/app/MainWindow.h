@@ -8,6 +8,10 @@
 
 namespace cb {
 
+namespace math {
+class Calculator;
+}
+
 struct AppServices;
 struct UiContext;
 class AppSettings;
@@ -45,6 +49,7 @@ public:
     PopoverHost& popoverHost() { return *m_popoverHost; }
     Ribbon& ribbon() { return *m_ribbon; }
     ToolSettings& toolSettings() { return *m_tools; }
+    math::Calculator& calculator() { return *m_calculator; }
     Toast& toast() { return *m_toast; }
 
     void activateTool(ToolId id);
@@ -77,6 +82,7 @@ private:
     std::unique_ptr<Document> m_doc;
     std::unique_ptr<TemplateLibrary> m_templates;
     std::unique_ptr<RecognizerRegistry> m_recognizers;
+    std::unique_ptr<math::Calculator> m_calculator;
 
     QWidget* m_boardArea = nullptr;
     CanvasWidget* m_canvas = nullptr;

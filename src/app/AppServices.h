@@ -1,5 +1,6 @@
 #pragma once
 
+#include "math/Calculator.h"
 #include "tools/Tool.h"
 
 #include <functional>
@@ -37,6 +38,7 @@ struct AppServices
     Toast& toast;
     PopoverController& popovers;
     const RecognizerRegistry& recognizers;
+    math::Calculator& calculator; ///< kept while the app runs (Ans, history, DEG/RAD)
     std::function<void(ToolId)> activateTool;
     std::function<void(qreal)> applyUiScale;
 };

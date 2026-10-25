@@ -3,6 +3,7 @@
 #include "app/AppServices.h"
 #include "ui/Popover.h"
 #include "ui/popovers/BoardPanels.h"
+#include "ui/popovers/CalculatorPanel.h"
 #include "ui/popovers/DrawingPanels.h"
 #include "ui/popovers/LessonPanels.h"
 #include "ui/popovers/MathPanels.h"
@@ -135,6 +136,10 @@ Popover* PopoverController::create(const QString& key)
         title = tr("PowerPoint");
         content = new ExportPagesPanel(s, ExportController::Format::Pptx);
         width = 400;
+    } else if (key == QLatin1String("calculator")) {
+        title = tr("Calculator");
+        content = new CalculatorPanel(s);
+        width = 470;
     } else if (key == QLatin1String("settings")) {
         title = tr("Settings");
         content = new SettingsPanel(s);

@@ -6,8 +6,8 @@ name: Release
 # this workflow builds and tests first, attaches the installer to a DRAFT release, checks the
 # upload, and only then publishes the draft. Do not create the release on github.com first
 # (that publishes it, and its tag, before the installer exists). Start a release with either:
-#   * Actions -> Release -> Run workflow, version = the version in CMakeLists.txt (e.g. 0.2.2)
-#   * git tag v0.2.2 && git push origin v0.2.2
+#   * Actions -> Release -> Run workflow, version = the version in CMakeLists.txt (e.g. 0.3.0)
+#   * git tag v0.3.0 && git push origin v0.3.0
 # A version whose release (published or draft) or, for the manual trigger, whose tag already
 # exists is refused: existing releases and tags are never reused or overwritten.
 on:
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release, e.g. 0.2.2 (must equal project(... VERSION) in CMakeLists.txt)"
+        description: "Version to release, e.g. 0.3.0 (must equal project(... VERSION) in CMakeLists.txt)"
         required: true
         type: string
       title:
@@ -63,7 +63,7 @@ jobs:
           fi
           if [ "$EVENT" = "workflow_dispatch" ]; then version="${INPUT_VERSION#v}"; else version="${REF_NAME#v}"; fi
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::'$version' is not a release version like 0.2.2"
+            echo "::error::'$version' is not a release version like 0.3.0"
             exit 1
           fi
           tag="v$version"

@@ -47,6 +47,11 @@ jobs:
           $exe = Get-ChildItem -Recurse -Filter pdftoppm.exe poppler-extract | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path poppler/bin | Out-Null
           Copy-Item "$($exe.DirectoryName)\*" poppler/bin -Recurse
+          # Licence files that come with this Poppler build (Poppler and the libraries it uses).
+          New-Item -ItemType Directory -Force -Path poppler/licenses | Out-Null
+          $licences = Get-ChildItem -Recurse -File poppler-extract | Where-Object { $_.Name -match '^(LICEN[CS]E|COPYING)' }
+          foreach ($l in $licences) { Copy-Item $l.FullName ("poppler/licenses/" + $l.Directory.Name + "-" + $l.Name) }
+          "Copied $($licences.Count) licence file(s) from the Poppler build"
           "$PWD\poppler\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       # LibreOffice lets the PowerPoint (.ppt / .pptx) import tests run on Windows too.

@@ -15,7 +15,7 @@ QString tr(const char* s) { return QCoreApplication::translate("Expression", s);
 
 enum class Fn {
     Sin, Cos, Tan, Cot, Sec, Csc, Asin, Acos, Atan, Sinh, Cosh, Tanh,
-    Sqrt, Cbrt, Abs, Ln, Log, Exp, Floor, Ceil, Round, Sign, Min, Max,
+    Sqrt, Cbrt, Abs, Ln, Log, Exp, Floor, Ceil, Round, Sign, Min, Max, Fact,
 };
 
 struct FnInfo
@@ -54,7 +54,7 @@ double constantValue(const QString& name)
 
 // ------------------------------------------------------------------------------------------ lexer
 
-enum class Tok { Number, Ident, Plus, Minus, Star, Slash, Caret, LParen, RParen, Comma, Bar, Root, End, Invalid };
+enum class Tok { Number, Ident, Plus, Minus, Star, Slash, Caret, LParen, RParen, Comma, Bar, Root, Bang, Percent, End, Invalid };
 
 struct Token
 {
@@ -132,6 +132,8 @@ std::vector<Token> tokenize(const QString& input, QString* error)
             case ',': case ';': t.type = Tok::Comma; break;
             case '|': t.type = Tok::Bar; break;
             case 0x221A: t.type = Tok::Root; break; // √
+            case '!': t.type = Tok::Bang; break;
+            case '%': t.type = Tok::Percent; break;
             default:
                 if (error)
                     *error = tr("Unexpected character '%1'").arg(c);
@@ -324,9 +326,24 @@ private:
         return parsePower();
     }
 
+    // Postfix operators bind tightest: 3!^2 = (3!)^2, 2^3! = 2^(3!), 50% = 0.5.
+    NodePtr parsePostfix(NodePtr operand)
+    {
+        while (operand && (peek().type == Tok::Bang || peek().type == Tok::Percent)) {
+            if (take().type == Tok::Bang) {
+                std::vector<NodePtr> args;
+                args.push_back(std::move(operand));
+                operand = makeCall(Fn::Fact, std::move(args));
+            } else {
+                operand = makeBin(Node::Kind::Div, std::move(operand), makeNum(100.0));
+            }
+        }
+        return operand;
+    }
+
     NodePtr parsePower()
     {
-        NodePtr base = parsePrimary();
+        NodePtr base = parsePostfix(parsePrimary());
         if (base && peek().type == Tok::Caret) {
             take();
             NodePtr exponent = parseUnary();
@@ -496,6 +513,7 @@ struct Expression::Program
     };
     std::vector<Instr> code;
     int maxDepth = 0;
+    bool degrees = false;
 };
 
 namespace {
@@ -545,8 +563,75 @@ void emitNode(const Node& n, Expression::Program& prog, QStringList& vars, int d
     }
 }
 
-double call1(Fn fn, double a)
+constexpr double kPi = 3.14159265358979323846;
+
+// Sine of an angle in degrees, exact at the multiples of 30° and 90° school work uses.
+double sinDeg(double d)
 {
+    double r = std::fmod(d, 360.0);
+    if (r < 0)
+        r += 360.0;
+    if (r == 0.0 || r == 180.0)
+        return 0.0;
+    if (r == 90.0)
+        return 1.0;
+    if (r == 270.0)
+        return -1.0;
+    if (r == 30.0 || r == 150.0)
+        return 0.5;
+    if (r == 210.0 || r == 330.0)
+        return -0.5;
+    return std::sin(r * kPi / 180.0);
+}
+
+double cosDeg(double d) { return sinDeg(d + 90.0); }
+
+double tanDeg(double d)
+{
+    double r = std::fmod(d, 180.0);
+    if (r < 0)
+        r += 180.0;
+    if (r == 0.0)
+        return 0.0;
+    if (r == 90.0)
+        return std::nan(""); // undefined
+    if (r == 45.0)
+        return 1.0;
+    if (r == 135.0)
+        return -1.0;
+    return sinDeg(r) / cosDeg(r);
+}
+
+double factorial(double a)
+{
+    if (a < 0 || a != std::floor(a) || a > 170)
+        return a > 170 ? HUGE_VAL : std::nan("");
+    double r = 1.0;
+    for (int i = 2; i <= static_cast<int>(a); ++i)
+        r *= i;
+    return r;
+}
+
+double call1Degrees(Fn fn, double a)
+{
+    switch (fn) {
+    case Fn::Sin: return sinDeg(a);
+    case Fn::Cos: return cosDeg(a);
+    case Fn::Tan: return tanDeg(a);
+    case Fn::Cot: return 1.0 / tanDeg(a);
+    case Fn::Sec: return 1.0 / cosDeg(a);
+    case Fn::Csc: return 1.0 / sinDeg(a);
+    case Fn::Asin: return std::asin(a) * 180.0 / kPi;
+    case Fn::Acos: return std::acos(a) * 180.0 / kPi;
+    case Fn::Atan: return std::atan(a) * 180.0 / kPi;
+    default: return std::nan("");
+    }
+}
+
+double call1(Fn fn, double a, bool degrees)
+{
+    if (degrees && (fn <= Fn::Atan))
+        return call1Degrees(fn, a);
     switch (fn) {
     case Fn::Sin: return std::sin(a);
     case Fn::Cos: return std::cos(a);
@@ -570,6 +655,7 @@ double call1(Fn fn, double a)
     case Fn::Ceil: return std::ceil(a);
     case Fn::Round: return std::round(a);
     case Fn::Sign: return a > 0 ? 1.0 : (a < 0 ? -1.0 : 0.0);
+    case Fn::Fact: return factorial(a);
     default: return std::nan("");
     }
 }
@@ -591,6 +677,11 @@ Expression::Expression() = default;
 
 Expression Expression::compile(const QString& text, QString* error)
 {
+    return compile(text, error, Options());
+}
+
+Expression Expression::compile(const QString& text, QString* error, const Options& options)
+{
     Expression e;
     e.m_source = text;
     QString err;
@@ -608,6 +699,7 @@ Expression Expression::compile(const QString& text, QString* error)
         return e;
     }
     auto prog = std::make_shared<Program>();
+    prog->degrees = options.degrees;
     QStringList vars;
     emitNode(*root, *prog, vars, 0, prog->maxDepth);
     e.m_program = prog;
@@ -640,7 +732,7 @@ double Expression::evaluate(const double* values, int count) const
         case Program::Op::Mul: --sp; stack[sp - 1] *= stack[sp]; break;
         case Program::Op::Div: --sp; stack[sp - 1] /= stack[sp]; break;
         case Program::Op::Pow: --sp; stack[sp - 1] = power(stack[sp - 1], stack[sp]); break;
-        case Program::Op::Call1: stack[sp - 1] = call1(in.fn, stack[sp - 1]); break;
+        case Program::Op::Call1: stack[sp - 1] = call1(in.fn, stack[sp - 1], p.degrees); break;
         case Program::Op::Call2:
             --sp;
             stack[sp - 1] = in.fn == Fn::Min ? std::min(stack[sp - 1], stack[sp]) : std::max(stack[sp - 1], stack[sp]);

@@ -46,6 +46,7 @@ add_library(classboard_lib STATIC
     input/PalmGesture.cpp
     math/CoordinateSystem.cpp
     math/MeasureScale.cpp
+    math/Calculator.cpp
     math/Expression.cpp
     math/equation/EquationObject.cpp
     math/equation/MathLayout.cpp
@@ -76,6 +77,7 @@ add_library(classboard_lib STATIC
     ui/Theme.cpp
     ui/Toast.cpp
     ui/popovers/BoardPanels.cpp
+    ui/popovers/CalculatorPanel.cpp
     ui/popovers/DrawingPanels.cpp
     ui/popovers/LessonPanels.cpp
     ui/popovers/MagicEquationPanel.cpp

@@ -40,7 +40,7 @@ and the installer name all use it. To build the installer yourself:
    `bin\poppler\bin` for PDF import.
 2. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run
    ```bat
-   iscc /DAppVersion=0.2.2 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
+   iscc /DAppVersion=0.3.0 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
    ```
    The installer is written to `installer\Output`.
 
@@ -62,14 +62,14 @@ installer to a **draft** release, checks the upload and only then publishes it. 
 the release on github.com yourself: that publishes it (and its tag) before the installer
 exists, and the installer can then never be attached.
 
-1. Set the new version in `CMakeLists.txt` (`project(ClassBoard VERSION 0.2.2 ...)`), commit
+1. Set the new version in `CMakeLists.txt` (`project(ClassBoard VERSION 0.3.0 ...)`), commit
    and push it. Use a version that has no release or tag yet.
 2. Start the release, either
-   * on github.com: **Actions → Release → Run workflow**, enter the same version (`0.2.2`),
-     optionally a title (giving "ClassBoard v0.2.2 — <title>") and whether it is a
-     pre-release; the workflow creates the tag `v0.2.2` when it publishes; or
-   * from git: `git tag v0.2.2 && git push origin v0.2.2`.
-3. The release appears with `ClassBoard-Setup-0.2.2-x64.exe` once the run is green. You can
+   * on github.com: **Actions → Release → Run workflow**, enter the same version (`0.3.0`),
+     optionally a title (giving "ClassBoard v0.3.0 — <title>") and whether it is a
+     pre-release; the workflow creates the tag `v0.3.0` when it publishes; or
+   * from git: `git tag v0.3.0 && git push origin v0.3.0`.
+3. The release appears with `ClassBoard-Setup-0.3.0-x64.exe` once the run is green. You can
    edit its notes afterwards; its assets are fixed.
 
 The workflow refuses, before building, a version that does not match `CMakeLists.txt`, a

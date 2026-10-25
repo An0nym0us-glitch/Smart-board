@@ -64,6 +64,7 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\bin\{#AppExe}"; WorkingDir: "{app}\bin"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\bin\{#AppExe}"; WorkingDir: "{app}\bin"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName} User Guide"; Filename: "{app}\doc\ClassBoard-User-Guide.pdf"
 
 [Registry]
 ; HKA = all users (HKLM) for an administrator install, the current user (HKCU) otherwise.

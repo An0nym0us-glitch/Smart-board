@@ -8,8 +8,8 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 
 * Tap **PEN**, **ERASER** or **SELECT** to switch tools. Tap the active tool again to open its
   options. A small caret on the button shows that options are available.
-* **MORE** opens every other tool: shapes, geometry, equations, graphs, instruments, images,
-  text, tables, templates, import/export and settings. When you pick one of these tools, it
+* **MORE** opens every other tool: shapes, geometry, equations, graphs, instruments, the
+  calculator, images, text, tables, templates, import/export and settings. When you pick one of these tools, it
   appears as an extra ribbon button. Tap that button to reopen the tool's options.
 * **FILE** (new, open, save, import, export), **INSERT** (image, shape, text, graph, equation,
   table, PDF, PowerPoint) and **EDIT** (undo, redo, cut, copy, paste, duplicate, delete, select
@@ -122,6 +122,24 @@ formula first, **Cancel** leaves everything as it was. If it cannot read the han
 says so and offers **Try again** (best guess), **Edit manually** (the Equation panel) or
 **Cancel**. It never changes handwriting on its own. The built-in recogniser reads digits,
 x, y, a, b, c, n, + − = ( ), powers such as x² and simple fractions.
+
+## Calculator
+
+MORE → **Calculator** opens a calculator with big touch keys. The result shows while you
+type (= 84), and is confirmed with **=**.
+
+* Keys: digits, + − × ÷, brackets, x², xʸ, √, π, e, sin / cos / tan and their inverses
+  (sin⁻¹ …), ln, log, n! (factorial), % (15% × 80 = 12) and **Ans** (the last result).
+* **DEG / RAD** chooses degrees (default, so sin 30 = 0.5) or radians for angles.
+* After **=**, an operator continues with the result (÷ 4 → Ans ÷ 4) and a number starts a
+  new calculation. A second operator replaces the first; brackets left open are closed for
+  you. **⌫** deletes the last character (or a whole function name), **AC** clears.
+* **Put on board** writes the calculation and its result on the page as an equation
+  (12 × 7 = 84) that you can move, resize and edit; one Undo removes it.
+* **Recent** lists the last calculations: tap one to use its result. **Copy result** copies
+  the number. The calculator keeps its result, history and DEG/RAD while ClassBoard runs.
+* A keyboard works too: type the calculation and press Enter; * and / are read as × and ÷.
+  Mistakes are explained (for example "Too large, or division by zero") and change nothing.
 
 ## Graphs
 

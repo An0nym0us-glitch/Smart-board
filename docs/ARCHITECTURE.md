@@ -122,7 +122,12 @@ compass and the protractor's stamp button produce document objects.
   result, measurements, points and vectors placed inside a graph use graph units.
 * `math::Expression` compiles expressions such as `a·sin(bx)+c`, `2x²`, `|x|` and `√x` into
   a stack program for fast plotting. It handles implicit multiplication and splits
-  multi-letter parameters.
+  multi-letter parameters. Its `Options` switch trigonometry to degrees (exact at 30°, 45°,
+  90° …), and it also reads postfix `!` (factorial) and `%`.
+* `math::Calculator` (owned by `MainWindow`, shared through `AppServices`) evaluates what is
+  typed in the Calculator panel with that engine. It keeps Ans and the recent calculations,
+  formats results like a school calculator and turns a calculation into LaTeX for "Put on
+  board" (an ordinary `EquationObject`, one undo step).
 * `mathtype::MathTypesetter` parses a LaTeX subset into a box tree (rows, fractions,
   radicals, scripts, limits, stretchy delimiters, matrices, accents). It paints with
   QPainter text and paths, so formulas stay vector in PDF export.

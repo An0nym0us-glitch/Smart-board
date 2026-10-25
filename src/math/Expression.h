@@ -13,7 +13,9 @@ namespace cb::math {
 ///
 /// Supported: + − * / ^, unary minus, implicit multiplication (2x, ax, 3(x+1), (x+1)(x−1), 2sin x),
 /// |x|, functions (sin cos tan cot sec csc asin acos atan sinh cosh tanh sqrt cbrt abs ln log exp
-/// floor ceil round sign min max), constants (pi, π, e), Unicode operators (× · ÷ − ² ³ √).
+/// floor ceil round sign min max), constants (pi, π, e), Unicode operators (× · ÷ − ² ³ √),
+/// postfix factorial (5!) and percent (15% = 0.15). Angles are radians unless compiled with
+/// Options::degrees (the calculator's DEG mode), where sin 30 = 0.5 and asin 0.5 = 30.
 /// Identifiers made of several unknown letters are split into single-letter variables ("abx"
 /// is a·b·x) which matches how teachers write parameters.
 ///
@@ -23,8 +25,14 @@ class Expression
 public:
     Expression();
 
+    struct Options
+    {
+        bool degrees = false; ///< trigonometric functions take and return degrees
+    };
+
     /// Parses and compiles. On failure the returned expression is invalid and error is set.
     static Expression compile(const QString& text, QString* error = nullptr);
+    static Expression compile(const QString& text, QString* error, const Options& options);
 
     bool isValid() const { return m_program != nullptr; }
     const QString& source() const { return m_source; }
