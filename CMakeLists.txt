@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.16)
 # the installer name (ClassBoard-Setup-<version>-x64.exe) all come from here. A release is
 # tagged v<version>; the release workflow refuses a tag that does not match.
 project(ClassBoard
-    VERSION 0.3.0
+    VERSION 0.3.1
     DESCRIPTION "Digital classroom whiteboard for interactive displays"
     HOMEPAGE_URL "https://github.com/An0nym0us-glitch/Smart-board22"
     LANGUAGES CXX)

@@ -32,7 +32,7 @@ version or a CRC mismatch, so a damaged file is reported instead of loading as g
 {
   "format": "classboard",
   "formatVersion": 1,
-  "application": "ClassBoard 0.3.0",
+  "application": "ClassBoard 0.3.1",
   "metadata": { "title": "", "author": "", "created": "ISO-8601", "modified": "ISO-8601" },
   "coordinates": { "m": [m11, m12, m21, m22, dx, dy], "unit": "cm",
                    "scale": { "board": 10, "boardUnit": "cm", "real": 1, "realUnit": "km" } },
