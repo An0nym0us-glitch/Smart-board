@@ -1,13 +1,13 @@
 #pragma once
 
 #include "tools/Tool.h"
+#include "ui/UiContext.h"
 
 #include <QVector>
 #include <QWidget>
 
 namespace cb {
 
-struct UiContext;
 class TouchButton;
 
 /// The bottom command ribbon: always visible, large touch targets, the primary command centre.
@@ -16,11 +16,22 @@ class TouchButton;
 ///
 /// Grouped buttons (File, Insert, Edit, Page, View) open attached popovers. When the window is too
 /// narrow the optional groups are hidden (everything stays reachable through MORE).
+///
+/// The ribbon has its own size on top of the interface size (Settings → Ribbon size), so a
+/// large board can have a slim ribbon, or a small screen a bigger one, without changing menus.
 class Ribbon : public QWidget
 {
     Q_OBJECT
 public:
-    explicit Ribbon(const UiContext& ui, QWidget* parent = nullptr);
+    static constexpr qreal kMinScale = 0.6;
+    static constexpr qreal kMaxScale = 1.5;
+
+    /// scale: the ribbon size relative to the interface size (1 = normal).
+    explicit Ribbon(const UiContext& ui, qreal scale = 1.0, QWidget* parent = nullptr);
+
+    qreal scale() const { return m_scale; }
+    /// Resizes the ribbon in place (buttons, icons, labels and height).
+    void setScale(qreal scale);
 
     TouchButton* moreButton() const { return m_more; }
     TouchButton* penButton() const { return m_pen; }
@@ -81,8 +92,13 @@ private:
     TouchButton* addButton(const QString& icon, const QString& text);
     /// Hides optional groups until everything fits into the available width.
     void updateFit();
+    void applyMetrics();
 
-    const UiContext& m_ui;
+    /// The ribbon's own theme: the interface theme at the ribbon's size.
+    UiContext m_ui;
+    qreal m_baseScale = 1.0; ///< the interface size
+    qreal m_scale = 1.0;
+    QVector<QWidget*> m_separators;
     TouchButton* m_more = nullptr;
     TouchButton* m_pen = nullptr;
     TouchButton* m_eraser = nullptr;

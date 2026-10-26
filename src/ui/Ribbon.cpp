@@ -6,6 +6,8 @@
 #include <QHBoxLayout>
 #include <QPainter>
 
+#include <algorithm>
+
 namespace cb {
 
 namespace {
@@ -16,7 +18,6 @@ public:
         : QWidget(parent)
         , m_ui(ui)
     {
-        setFixedWidth(ui.theme.dpi(13));
     }
 
 protected:
@@ -34,20 +35,24 @@ private:
 };
 } // namespace
 
-Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
+Ribbon::Ribbon(const UiContext& base, qreal scale, QWidget* parent)
     : QWidget(parent)
-    , m_ui(ui)
+    , m_baseScale(base.theme.uiScale())
+    , m_scale(std::clamp(scale, kMinScale, kMaxScale))
 {
-    const Theme& t = ui.theme;
-    setFixedHeight(t.scaledInt(ThemeMetric::RibbonHeight));
+    m_ui.theme = base.theme;
+    m_ui.theme.setUiScale(m_baseScale * m_scale);
+    const UiContext& ui = m_ui;
     auto* layout = new QHBoxLayout(this);
-    layout->setContentsMargins(t.dpi(8), t.dpi(6), t.dpi(8), t.dpi(6));
-    layout->setSpacing(t.dpi(4));
+    auto separator = [this, &ui]() {
+        m_separators.append(new Separator(ui, this));
+        return m_separators.last();
+    };
 
     m_more = addButton(QStringLiteral("more"), tr("More"));
     m_more->setCheckable(true);
     layout->addWidget(m_more);
-    layout->addWidget(new Separator(ui, this));
+    layout->addWidget(separator());
 
     m_pen = addButton(QStringLiteral("pen"), tr("Pen"));
     m_eraser = addButton(QStringLiteral("eraser"), tr("Eraser"));
@@ -59,7 +64,7 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
         layout->addWidget(b);
     }
     m_toolChip->setVisible(false);
-    layout->addWidget(new Separator(ui, this));
+    layout->addWidget(separator());
 
     m_undo = addButton(QStringLiteral("undo"), tr("Undo"));
     m_redo = addButton(QStringLiteral("redo"), tr("Redo"));
@@ -67,7 +72,7 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     layout->addWidget(m_redo);
 
     // File / Insert / Edit groups (popovers).
-    m_groupSeparator = new Separator(ui, this);
+    m_groupSeparator = separator();
     layout->addWidget(m_groupSeparator);
     m_file = addButton(QStringLiteral("file"), tr("File"));
     m_insert = addButton(QStringLiteral("insert"), tr("Insert"));
@@ -86,7 +91,6 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     m_prev = new TouchButton(ui, QStringLiteral("chevron-left"), tr("Previous page"), TouchButton::Style::Icon, this);
     m_page = new TouchButton(ui, QString(), QStringLiteral("1 / 1"), TouchButton::Style::Pill, this);
     m_page->setToolTip(tr("Pages"));
-    m_page->setMinimumWidth(t.dpi(120));
     m_next = new TouchButton(ui, QStringLiteral("chevron-right"), tr("Next page"), TouchButton::Style::Icon, this);
     m_newPage = addButton(QStringLiteral("page-add"), tr("New page"));
     m_newPage->setToolTip(tr("Add a blank page after this one"));
@@ -105,7 +109,6 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     m_zoomOut = new TouchButton(ui, QStringLiteral("zoom-out"), tr("Zoom out"), TouchButton::Style::Icon, this);
     m_zoom = new TouchButton(ui, QString(), QStringLiteral("100%"), TouchButton::Style::Pill, this);
     m_zoom->setToolTip(tr("Zoom and view: 25 % to 250 %, fit page, fit width"));
-    m_zoom->setMinimumWidth(t.dpi(84));
     m_zoomIn = new TouchButton(ui, QStringLiteral("zoom-in"), tr("Zoom in"), TouchButton::Style::Icon, this);
     m_fit = new TouchButton(ui, QStringLiteral("fit-page"), tr("Fit page"), TouchButton::Style::Icon, this);
     m_fullScreen = new TouchButton(ui, QStringLiteral("fullscreen"), tr("Full screen"), TouchButton::Style::Icon, this);
@@ -114,6 +117,8 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     layout->addWidget(m_zoomIn);
     layout->addWidget(m_fit);
     layout->addWidget(m_fullScreen);
+
+    applyMetrics();
 
     m_optional = {{m_fit}, {m_zoomOut, m_zoomIn}, {m_edit}, {m_insert}, {m_file, m_groupSeparator}, {m_prev, m_next}};
 
@@ -137,6 +142,35 @@ Ribbon::Ribbon(const UiContext& ui, QWidget* parent)
     connect(m_zoomOut, &QAbstractButton::clicked, this, &Ribbon::zoomOutClicked);
     connect(m_fit, &QAbstractButton::clicked, this, &Ribbon::fitClicked);
     connect(m_fullScreen, &QAbstractButton::clicked, this, &Ribbon::fullScreenClicked);
+}
+
+void Ribbon::setScale(qreal scale)
+{
+    scale = std::clamp(scale, kMinScale, kMaxScale);
+    if (qFuzzyCompare(scale, m_scale))
+        return;
+    m_scale = scale;
+    m_ui.theme.setUiScale(m_baseScale * m_scale);
+    applyMetrics();
+    updateFit();
+    update();
+}
+
+void Ribbon::applyMetrics()
+{
+    const Theme& t = m_ui.theme;
+    setFixedHeight(t.scaledInt(ThemeMetric::RibbonHeight));
+    layout()->setContentsMargins(t.dpi(8), t.dpi(6), t.dpi(8), t.dpi(6));
+    layout()->setSpacing(t.dpi(4));
+    for (QWidget* s : m_separators)
+        s->setFixedWidth(t.dpi(13));
+    m_page->setMinimumWidth(t.dpi(120));
+    m_zoom->setMinimumWidth(t.dpi(84));
+    for (TouchButton* b : findChildren<TouchButton*>()) {
+        b->updateGeometry();
+        b->update();
+    }
+    updateGeometry();
 }
 
 void Ribbon::resizeEvent(QResizeEvent* event)

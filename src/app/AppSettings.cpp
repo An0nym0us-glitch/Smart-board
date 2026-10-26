@@ -22,6 +22,7 @@ AppSettings::AppSettings(QObject* parent)
     , m_store(settingsPath(), QSettings::IniFormat)
 {
     m_uiScale = m_store.value(QStringLiteral("ui/scale"), 0.0).toDouble();
+    m_ribbonScale = std::clamp(m_store.value(QStringLiteral("ui/ribbonScale"), 1.0).toDouble(), 0.6, 1.5);
     m_autosaveSeconds = m_store.value(QStringLiteral("autosave/seconds"), 60).toInt();
     m_palmErase = m_store.value(QStringLiteral("input/palmErase"), true).toBool();
     m_multiUserTouch = m_store.value(QStringLiteral("input/multiUserTouch"), false).toBool();
@@ -41,6 +42,12 @@ void AppSettings::setUiScale(qreal scale)
 {
     m_uiScale = scale <= 0 ? 0.0 : std::clamp(scale, 0.75, 3.0);
     store(QStringLiteral("ui/scale"), m_uiScale);
+}
+
+void AppSettings::setRibbonScale(qreal scale)
+{
+    m_ribbonScale = std::clamp(scale, 0.6, 1.5);
+    store(QStringLiteral("ui/ribbonScale"), m_ribbonScale);
 }
 
 void AppSettings::setAutosaveSeconds(int seconds)

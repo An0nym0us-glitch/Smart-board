@@ -20,6 +20,10 @@ ClassBoard opens on a clean blackboard with the pen ready. The ribbon at the bot
 * Tap the **zoom percentage** for the View menu; **−** and **+** step through the zoom presets
   and the frame button fits the page.
 * Tap anywhere outside a popover to close it.
+* **Ribbon too big or too small for your display?** MORE → Settings → **Ribbon size** makes
+  the ribbon slimmer (down to 60 %) or bigger (up to 150 %) while you watch; menus keep their
+  size. **Normal ribbon size** goes back to 100 %. **Interface size** above it changes
+  everything (ribbon and menus) together. Both are remembered.
 
 ## Touch, pen and mouse
 

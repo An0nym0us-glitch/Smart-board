@@ -13,6 +13,7 @@
 #include "storage/PdfImporter.h"
 #include "tools/EditOperations.h"
 #include "tools/ToolSettings.h"
+#include "ui/Ribbon.h"
 #include "ui/Toast.h"
 #include "ui/UiContext.h"
 #include "ui/popovers/PanelUtil.h"
@@ -431,6 +432,23 @@ SettingsPanel::SettingsPanel(const AppServices& s, QWidget* parent)
         sp->applyUiScale(0);
     });
     layout->addWidget(panel::row(ui, {autoScale}, this));
+    // The bottom ribbon has its own size: slimmer on a big board, bigger on a small screen.
+    auto* ribbon = new TouchSlider(ui, tr("Ribbon size"), this);
+    ribbon->setObjectName(QStringLiteral("ribbonSize"));
+    ribbon->setRange(Ribbon::kMinScale, Ribbon::kMaxScale);
+    ribbon->setStep(0.05);
+    ribbon->setValue(settings->ribbonScale());
+    ribbon->setFormatter([](double v) { return QString::number(qRound(v * 100)) + QStringLiteral(" %"); });
+    connect(ribbon, &TouchSlider::valueChanged, this, [sp](double v) { sp->applyRibbonScale(v); });
+    connect(ribbon, &TouchSlider::sliderReleased, this, [settings, ribbon]() { settings->setRibbonScale(ribbon->value()); });
+    layout->addWidget(ribbon);
+    auto* normalRibbon = panel::pill(ui, QStringLiteral("reset"), tr("Normal ribbon size"), this, [sp, settings, ribbon]() {
+        settings->setRibbonScale(1.0);
+        ribbon->setValue(1.0);
+        sp->applyRibbonScale(1.0);
+    });
+    normalRibbon->setObjectName(QStringLiteral("normalRibbon"));
+    layout->addWidget(panel::row(ui, {normalRibbon}, this));
     auto* frame = new ToggleRow(ui, tr("Show page frame"), this);
     frame->setDescription(tr("Outline of the area used for export and slides"));
     frame->setChecked(settings->showPageFrame());

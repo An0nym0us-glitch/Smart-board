@@ -19,6 +19,9 @@ public:
     /// 0 = automatic (derived from the screen).
     qreal uiScale() const { return m_uiScale; }
     void setUiScale(qreal scale);
+    /// Size of the bottom ribbon relative to the interface size (1 = normal).
+    qreal ribbonScale() const { return m_ribbonScale; }
+    void setRibbonScale(qreal scale);
     int autosaveSeconds() const { return m_autosaveSeconds; }
     void setAutosaveSeconds(int seconds);
     bool palmErase() const { return m_palmErase; }
@@ -53,6 +56,7 @@ private:
 
     QSettings m_store;
     qreal m_uiScale = 0.0;
+    qreal m_ribbonScale = 1.0;
     int m_autosaveSeconds = 60;
     bool m_palmErase = true;
     bool m_multiUserTouch = false;

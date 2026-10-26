@@ -128,7 +128,8 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
                                      *m_recognizers,
                                      *m_calculator,
                                      [this](ToolId id) { activateTool(id); },
-                                     [this](qreal scale) { applyUiScale(scale); }});
+                                     [this](qreal scale) { applyUiScale(scale); },
+                                     [this](qreal scale) { m_ribbon->setScale(scale); }});
     m_popovers->setServices(m_services.get());
 
     m_selectionBar = new SelectionBar(*m_services, m_canvas);
@@ -225,7 +226,7 @@ void MainWindow::buildRibbon()
         layout->removeWidget(m_ribbon);
         m_ribbon->deleteLater();
     }
-    m_ribbon = new Ribbon(m_ui, central);
+    m_ribbon = new Ribbon(m_ui, m_settings.ribbonScale(), central);
     layout->addWidget(m_ribbon);
 
     connect(m_ribbon, &Ribbon::moreClicked, this, [this]() { m_popovers->toggle(QStringLiteral("more"), m_ribbon->moreButton()); });

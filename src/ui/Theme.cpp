@@ -134,7 +134,8 @@ qreal Theme::metric(ThemeMetric role) const
 
 void Theme::setUiScale(qreal scale)
 {
-    m_scale = std::clamp(scale, 0.75, 3.0);
+    // 0.45 leaves room for a slim ribbon (Settings → Ribbon size) on a small interface size.
+    m_scale = std::clamp(scale, 0.45, 3.0);
 }
 
 QFont Theme::font(qreal pixelSizeDp, bool bold) const

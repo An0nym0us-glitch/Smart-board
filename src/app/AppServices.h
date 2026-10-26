@@ -41,6 +41,8 @@ struct AppServices
     math::Calculator& calculator; ///< kept while the app runs (Ans, history, DEG/RAD)
     std::function<void(ToolId)> activateTool;
     std::function<void(qreal)> applyUiScale;
+    /// Resizes the bottom ribbon (relative to the interface size, 1 = normal).
+    std::function<void(qreal)> applyRibbonScale;
 };
 
 } // namespace cb
