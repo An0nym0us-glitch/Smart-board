@@ -40,9 +40,12 @@ and the installer name all use it. To build the installer yourself:
    `bin\poppler\bin` for PDF import.
 2. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run
    ```bat
-   iscc /DAppVersion=0.3.0 /DSourceDir=C:\cb\ClassBoard installer\ClassBoard.iss
+   python installer\make_animation.py C:\cb\animation
+   iscc /DAppVersion=0.3.2 /DSourceDir=C:\cb\ClassBoard /DAnimationDir=C:\cb\animation installer\ClassBoard.iss
    ```
-   The installer is written to `installer\Output`.
+   The installer is written to `installer\Output`. `make_animation.py` (needs `pip install
+   pillow`) draws the board animation the installer plays while installing; leave out
+   `/DAnimationDir` for an installer without it.
 
 The installer lets you install for all users (Program Files, needs administrator rights) or
 only for yourself. It adds a Start menu entry, an optional desktop shortcut, opens
