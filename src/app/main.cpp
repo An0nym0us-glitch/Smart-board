@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
         settings.setUiScale(parser.value(scale).toDouble());
 
     cb::MainWindow window(ui, settings);
-    window.show();
+    window.showOnStartup();
     const QStringList args = parser.positionalArguments();
     window.startup(args.isEmpty() ? QString() : args.first());
 

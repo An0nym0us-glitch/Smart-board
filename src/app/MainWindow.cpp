@@ -195,12 +195,6 @@ MainWindow::MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent)
     activateTool(ToolId::Pen);
     updateRibbonState();
     updateTitle();
-
-    const QByteArray geometry = m_settings.windowGeometry();
-    if (!geometry.isEmpty())
-        restoreGeometry(geometry);
-    else
-        resize(1440, 900);
 }
 
 MainWindow::~MainWindow()
@@ -510,11 +504,49 @@ void MainWindow::createShortcuts()
 
 // ---------------------------------------------------------------------------------- lifecycle
 
+bool MainWindow::fitsOnScreen(const QRect& normal, const QRect& available)
+{
+    // Room for the title bar and the borders Windows adds around the window.
+    return normal.isValid() && available.contains(normal.adjusted(-8, -40, 8, 8));
+}
+
+MainWindow::Placement MainWindow::startupPlacement(bool fullScreen, bool maximized, const QRect& normal,
+                                                   const QRect& available)
+{
+    if (fullScreen)
+        return Placement::FullScreen;
+    if (maximized || !fitsOnScreen(normal, available))
+        return Placement::Maximized;
+    return Placement::Normal;
+}
+
+void MainWindow::showOnStartup()
+{
+    const QRect saved = m_settings.windowNormalGeometry();
+    QScreen* screen = saved.isValid() ? QGuiApplication::screenAt(saved.center()) : nullptr;
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    const QRect available = screen->availableGeometry();
+    // The size the window gets when it is no longer maximized: the saved one if it still fits,
+    // otherwise most of the screen.
+    QRect normal = saved;
+    if (!fitsOnScreen(saved, available)) {
+        normal = QRect(QPoint(), available.size() * 0.8);
+        normal.moveCenter(available.center());
+    }
+    setGeometry(normal);
+    // Always a real maximize: a window merely sized like the screen covers the taskbar there,
+    // hiding the ribbon.
+    switch (startupPlacement(m_settings.fullScreen(), m_settings.windowMaximized(), saved, available)) {
+    case Placement::FullScreen: showFullScreen(); break;
+    case Placement::Maximized: showMaximized(); break;
+    case Placement::Normal: showNormal(); break;
+    }
+}
+
 void MainWindow::startup(const QString& fileToOpen)
 {
     applyUiScale(m_settings.uiScale());
-    if (m_settings.fullScreen())
-        showFullScreen();
     if (!fileToOpen.isEmpty() && QFileInfo::exists(fileToOpen)) {
         m_lesson->openFile(fileToOpen);
     } else {
@@ -585,8 +617,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
     }
     m_settings.saveTools(*m_tools);
     m_settings.setFullScreen(isFullScreen());
-    if (!isFullScreen())
-        m_settings.setWindowGeometry(saveGeometry());
+    m_settings.setWindowMaximized(isMaximized() || isFullScreen());
+    m_settings.setWindowNormalGeometry(normalGeometry());
     m_settings.sync();
     m_lesson->autosave().discard();
     event->accept();

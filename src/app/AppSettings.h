@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QRect>
 #include <QSettings>
 #include <QStringList>
 
@@ -41,8 +42,12 @@ public:
     void loadTools(ToolSettings& tools) const;
     void saveTools(const ToolSettings& tools);
 
-    QByteArray windowGeometry() const;
-    void setWindowGeometry(const QByteArray& geometry);
+    /// Whether the window was maximized when ClassBoard closed (true until it is closed smaller).
+    bool windowMaximized() const;
+    void setWindowMaximized(bool on);
+    /// The window's size and position when it is not maximized or full screen (empty if unknown).
+    QRect windowNormalGeometry() const;
+    void setWindowNormalGeometry(const QRect& geometry);
     bool fullScreen() const;
     void setFullScreen(bool on);
 

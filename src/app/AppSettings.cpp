@@ -143,14 +143,27 @@ void AppSettings::saveTools(const ToolSettings& t)
     m_store.setValue(QStringLiteral("text/size"), t.textFormat().pixelSize);
 }
 
-QByteArray AppSettings::windowGeometry() const
+bool AppSettings::windowMaximized() const
 {
-    return m_store.value(QStringLiteral("window/geometry")).toByteArray();
+    return m_store.value(QStringLiteral("window/maximized"), true).toBool();
 }
 
-void AppSettings::setWindowGeometry(const QByteArray& geometry)
+void AppSettings::setWindowMaximized(bool on)
 {
-    m_store.setValue(QStringLiteral("window/geometry"), geometry);
+    m_store.setValue(QStringLiteral("window/maximized"), on);
+}
+
+QRect AppSettings::windowNormalGeometry() const
+{
+    return m_store.value(QStringLiteral("window/normalGeometry")).toRect();
+}
+
+void AppSettings::setWindowNormalGeometry(const QRect& geometry)
+{
+    m_store.setValue(QStringLiteral("window/normalGeometry"), geometry);
+    // Replaced by window/maximized and window/normalGeometry: Qt's saved geometry could reopen
+    // a maximized window at the full screen height, under the taskbar.
+    m_store.remove(QStringLiteral("window/geometry"));
 }
 
 bool AppSettings::fullScreen() const

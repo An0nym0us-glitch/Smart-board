@@ -39,8 +39,19 @@ public:
     MainWindow(UiContext& ui, AppSettings& settings, QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    /// Shows the window when ClassBoard starts: full screen if it was closed full screen,
+    /// otherwise maximized (the area the taskbar leaves free), or at the size it was closed with
+    /// if that was smaller and still fits on the screen.
+    void showOnStartup();
     /// Opens a lesson passed on the command line (or restores a crashed session).
     void startup(const QString& fileToOpen);
+
+    enum class Placement { FullScreen, Maximized, Normal };
+    /// How showOnStartup() opens the window. normal: the saved window rectangle without its frame;
+    /// available: the screen without the taskbar.
+    static Placement startupPlacement(bool fullScreen, bool maximized, const QRect& normal, const QRect& available);
+    /// Whether a window rectangle (without its frame) fits on the screen with its frame.
+    static bool fitsOnScreen(const QRect& normal, const QRect& available);
 
     CanvasWidget& canvas() { return *m_canvas; }
     Document& document() { return *m_doc; }
