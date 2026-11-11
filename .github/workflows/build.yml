@@ -90,11 +90,34 @@ jobs:
           }
           # The version comes from project(... VERSION x.y.z) in CMakeLists.txt.
           $version = (Select-String -Path CMakeLists.txt -Pattern '^\s+VERSION\s+(\d+\.\d+\.\d+)').Matches[0].Groups[1].Value
-          & $iscc "/DAppVersion=$version" "/DSourceDir=${{ github.workspace }}\ClassBoard" "/O${{ github.workspace }}\installer-output" installer\ClassBoard.iss
+          # The board animation that plays while installing (frames drawn by make_animation.py).
+          python -m pip install --disable-pip-version-check --quiet pillow
+          if ($LASTEXITCODE -ne 0) { throw "Could not install Pillow" }
+          python installer\make_animation.py installer-animation
+          if ($LASTEXITCODE -ne 0) { throw "Could not draw the installer animation" }
+          & $iscc "/DAppVersion=$version" "/DSourceDir=${{ github.workspace }}\ClassBoard" "/DAnimationDir=${{ github.workspace }}\installer-animation" "/O${{ github.workspace }}\installer-output" installer\ClassBoard.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
           $expected = "installer-output\ClassBoard-Setup-$version-x64.exe"
           if (-not (Test-Path $expected)) { throw "Expected installer $expected was not produced" }
           Get-ChildItem installer-output
+
+      # Runs the installer as a user would (silently, for the current user only), which also
+      # runs its script (the animation and the minimize button), then uninstalls it again.
+      - name: Test the installer
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer-output -Filter "ClassBoard-Setup-*-x64.exe" | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\ClassBoard-installed"
+          $log = "$env:RUNNER_TEMP\classboard-setup.log"
+          $p = Start-Process $setup.FullName -Wait -PassThru -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=$dir", "/LOG=$log"
+          if ($p.ExitCode -ne 0 -or -not (Test-Path "$dir\bin\ClassBoard.exe")) {
+            Get-Content $log -ErrorAction SilentlyContinue
+            throw "Installing failed (exit code $($p.ExitCode))"
+          }
+          Select-String -Path $log -Pattern "board-00.bmp|error" | ForEach-Object { $_.Line }
+          $u = Start-Process "$dir\unins000.exe" -Wait -PassThru -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          if ($u.ExitCode -ne 0) { throw "Uninstalling failed (exit code $($u.ExitCode))" }
+          "Installed and uninstalled $($setup.Name)"
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
